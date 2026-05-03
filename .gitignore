@@ -1,0 +1,52 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# LaTeX build artefacts (in case generated manuscripts are dropped here)
+*.aux
+*.log
+*.toc
+*.out
+*.bbl
+*.blg
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.nav
+*.snm
+*.vrb
+
+# Python (in case verification scripts are tested locally)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Node / web tooling (only if a docs site is added later)
+node_modules/
+.cache/
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+*.local
+
+# Personal scratch
+scratch/
+notes/
+TODO-personal.md
