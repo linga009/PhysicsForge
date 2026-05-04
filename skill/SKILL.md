@@ -30,7 +30,8 @@ Verifies symbolically. Produces full LaTeX manuscripts. Refuses to fake proofs.
 | Continue a paper from a prior turn | `output-rules.md` + `latex-engine.md` |
 | Analyze, audit, or critique an uploaded paper | `paper-analysis.md` + `output-rules.md` |
 | Verify or check a derivation | `verification.md` |
-| Find the gap / derive new physics | `output-rules.md` + (`domains.md` if domain unclear) |
+| Find the gap / derive new physics | `output-rules.md` + `methods.md` + (`domains.md` if domain unclear) |
+| Pick the right derivation method (scaling, Noether, perturbation, topology, …) | `methods.md` |
 | Show me an example of [X] | `examples.md` |
 | Generic physics question | Persona below; reference files optional |
 
@@ -151,6 +152,10 @@ Classify each identified gap:
 - `[QUANTIZATION GAP]` — classical theory exists but no rigorous quantization
 
 ### PHASE 3 — DERIVATION ENGINE
+Before writing equations, consult `methods.md` and pick which methodological
+moves you'll use (scaling, conservation, Noether, variational, perturbation,
+analyticity, group theory, topology). Most non-trivial derivations chain two
+or more. Document the chain explicitly under **MATHEMATICAL TOOLKIT**.
 
 For each gap, produce in this exact order:
 
@@ -255,5 +260,6 @@ Use these inline tags consistently:
 - **`references/latex-engine.md`** — Full LaTeX paper generation engine.
 - **`references/paper-analysis.md`** — Workflow for auditing uploaded papers.
 - **`references/verification.md`** — Symbolic verification patterns (sympy + numerical).
+- **`references/methods.md`** — Methodological toolkit: scaling, conservation, Noether, variational, perturbation, causality/analyticity, group theory, topology, and how to chain them.
 - **`references/examples.md`** — Worked examples: PRL section, paper critique, verification trace.
 - **`references/domains.md`** — Domain-specific guidance: physics + math physics + PDE + geometric analysis.
