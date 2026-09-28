@@ -22,10 +22,11 @@ A citation with neither `doi` nor `arxiv` is reported UNVERIFIABLE.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
+import random
 import re
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -38,6 +39,76 @@ log = logging.getLogger("citation_guard")
 
 CROSSREF_UA = "PhysicsForgeCitationGuard/0.1 (mailto:lingamraju26@gmail.com)"
 ARXIV_API = "https://export.arxiv.org/api/query"
+
+MAX_RETRIES = 3
+BASE_DELAY_S = 1.0
+CACHE_DIR = Path(__file__).parent / ".citation_cache"
+CACHE_TTL_S = 24 * 3600  # retraction status can change; don't cache forever
+
+# Errors worth retrying: connection resets, timeouts, 5xx, 429. NOT 404 --
+# that is a real answer (the DOI/arXiv ID genuinely doesn't exist), and
+# retrying it wastes time and hammers the API for no reason.
+_RETRYABLE_HTTP = {429, 500, 502, 503, 504}
+
+
+class _Cache:
+    """Exact-match, on-disk, TTL'd cache keyed by URL. Deliberately simple --
+    citations get re-checked across repeated CI runs of the same bibliography,
+    and there is no reason to re-fetch an answer that hasn't gone stale."""
+
+    def __init__(self, path: Path, ttl_s: float, enabled: bool = True):
+        self.path = path
+        self.ttl_s = ttl_s
+        self.enabled = enabled
+        if enabled:
+            path.mkdir(exist_ok=True)
+
+    def _key(self, url: str) -> Path:
+        return self.path / (hashlib.sha256(url.encode()).hexdigest() + ".json")
+
+    def get(self, url: str) -> tuple[dict | None, str | None] | None:
+        if not self.enabled:
+            return None
+        f = self._key(url)
+        if not f.exists():
+            return None
+        if time.time() - f.stat().st_mtime > self.ttl_s:
+            return None
+        try:
+            payload = json.loads(f.read_text(encoding="utf-8"))
+            log.info("CACHE HIT %s", url)
+            return payload["data"], payload["err"]
+        except Exception:  # noqa: BLE001 -- a corrupt cache entry should never crash a run
+            return None
+
+    def put(self, url: str, data: dict | None, err: str | None) -> None:
+        if not self.enabled:
+            return
+        try:
+            self.path.mkdir(exist_ok=True)  # directory may have been removed since __init__
+            self._key(url).write_text(json.dumps({"data": data, "err": err}), encoding="utf-8")
+        except Exception:  # noqa: BLE001 -- caching is an optimization, not load-bearing
+            log.warning("failed to write cache entry for %s", url)
+
+
+_cache = _Cache(CACHE_DIR, CACHE_TTL_S)
+
+
+def _citeguard_cache(enabled: bool = True):
+    """citeguard.check_doi() accepts an injectable cache -- use it instead of
+    leaving its retraction-check network calls uncached, which is the actual
+    reason a warm run wasn't as fast as it should have been (measured: ~44%
+    faster with only our own cache; citeguard's own Crossref calls, made
+    internally, weren't covered at all). Same TTL policy as our own cache,
+    applied by hand since FileCache itself has no TTL concept."""
+    if not enabled:
+        return None
+    import citeguard
+    path = CACHE_DIR / "citeguard_retractions.json"
+    if path.exists() and time.time() - path.stat().st_mtime > CACHE_TTL_S:
+        path.unlink()
+    CACHE_DIR.mkdir(exist_ok=True)
+    return citeguard.FileCache(path)
 
 
 # --------------------------------------------------------------------------- verdicts
@@ -68,48 +139,89 @@ class CitationResult:
 
 # --------------------------------------------------------------------------- fetchers
 
-def _http_get_json(url: str, headers: dict[str, str]) -> tuple[dict | None, str | None]:
+def _http_get_once(url: str, headers: dict[str, str]) -> tuple[str | None, str | None]:
+    """A single attempt, no retry. Returns (raw_text, error). error is one of:
+    "not_found" (404 -- a real, non-retryable answer), "retry:<reason>" (worth
+    retrying), or any other string (non-retryable failure)."""
     t0 = time.monotonic()
     req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            text = resp.read().decode("utf-8")
         dt = (time.monotonic() - t0) * 1000
         log.info("GET %s -> 200 (%.0f ms)", url, dt)
-        return data, None
+        return text, None
     except urllib.error.HTTPError as e:
         dt = (time.monotonic() - t0) * 1000
         log.info("GET %s -> %s (%.0f ms)", url, e.code, dt)
         if e.code == 404:
             return None, "not_found"
+        if e.code in _RETRYABLE_HTTP:
+            retry_after = e.headers.get("Retry-After") if e.headers else None
+            return None, f"retry:http_{e.code}:{retry_after or ''}"
         return None, f"http_{e.code}"
-    except Exception as e:  # noqa: BLE001 -- network is inherently flaky, report don't crash
+    except (TimeoutError, ConnectionError, urllib.error.URLError) as e:
         dt = (time.monotonic() - t0) * 1000
-        log.warning("GET %s -> ERROR %s (%.0f ms)", url, e, dt)
+        log.warning("GET %s -> transient ERROR %s (%.0f ms)", url, e, dt)
+        return None, f"retry:{e}"
+    except Exception as e:  # noqa: BLE001 -- unknown failures: report, don't crash, don't retry blindly
+        dt = (time.monotonic() - t0) * 1000
+        log.warning("GET %s -> non-retryable ERROR %s (%.0f ms)", url, e, dt)
         return None, str(e)
 
 
-def fetch_crossref_metadata(doi: str) -> tuple[dict | None, str | None]:
+def _http_get(url: str, headers: dict[str, str], *,
+              max_retries: int = MAX_RETRIES,
+              base_delay: float = BASE_DELAY_S,
+              sleep=time.sleep,
+              use_cache: bool = True) -> tuple[str | None, str | None]:
+    """Retrying, cached wrapper around _http_get_once. `sleep` is injectable
+    so tests can verify retry/backoff behaviour without actually waiting --
+    real flakiness is not a substitute for a deterministic test
+    (idea-to-production-tool: "determinism before deltas")."""
+    if use_cache:
+        cached = _cache.get(url)
+        if cached is not None:
+            return cached
+
+    err = None
+    text = None
+    for attempt in range(max_retries + 1):
+        text, err = _http_get_once(url, headers)
+        if err is None or not err.startswith("retry:"):
+            clean_err = None if err is None else err
+            if use_cache and clean_err != "not_found":  # don't permanently cache 404s
+                _cache.put(url, text, clean_err)
+            return text, clean_err
+        if attempt < max_retries:
+            reason = err[len("retry:"):]
+            retry_after_s = None
+            if ":" in reason:
+                reason, _, ra = reason.partition(":")
+                if ra.strip().isdigit():
+                    retry_after_s = float(ra.strip())
+            delay = retry_after_s if retry_after_s is not None else (
+                base_delay * (2 ** attempt) + random.uniform(0, 0.5))
+            log.warning("retrying %s after %r (attempt %d/%d) in %.1fs",
+                        url, reason, attempt + 1, max_retries, delay)
+            sleep(delay)
+    # exhausted retries
+    return None, err[len("retry:"):] if err and err.startswith("retry:") else err
+
+
+def fetch_crossref_metadata(doi: str, **retry_kwargs) -> tuple[dict | None, str | None]:
     url = f"https://api.crossref.org/works/{doi}"
-    data, err = _http_get_json(url, {"User-Agent": CROSSREF_UA})
+    text, err = _http_get(url, {"User-Agent": CROSSREF_UA}, **retry_kwargs)
     if err:
         return None, err
-    return data.get("message"), None
+    return json.loads(text).get("message"), None
 
 
-def fetch_arxiv_metadata(arxiv_id: str) -> tuple[dict | None, str | None]:
+def fetch_arxiv_metadata(arxiv_id: str, **retry_kwargs) -> tuple[dict | None, str | None]:
     url = f"{ARXIV_API}?id_list={arxiv_id}"
-    t0 = time.monotonic()
-    req = urllib.request.Request(url, headers={"User-Agent": CROSSREF_UA})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            xml = resp.read().decode("utf-8")
-        dt = (time.monotonic() - t0) * 1000
-        log.info("GET %s -> 200 (%.0f ms)", url, dt)
-    except Exception as e:  # noqa: BLE001
-        dt = (time.monotonic() - t0) * 1000
-        log.warning("GET %s -> ERROR %s (%.0f ms)", url, e, dt)
-        return None, str(e)
+    xml, err = _http_get(url, {"User-Agent": CROSSREF_UA}, **retry_kwargs)
+    if err:
+        return None, err
 
     if "<entry>" not in xml or re.search(r"<title>\s*Error\s*</title>", xml, re.I):
         return None, "not_found"
@@ -155,7 +267,8 @@ def compare_metadata(
 
 # --------------------------------------------------------------------------- main check
 
-def check_citation(entry: dict[str, Any]) -> CitationResult:
+def check_citation(entry: dict[str, Any], *, use_cache: bool = True,
+                    citeguard_cache=None) -> CitationResult:
     key = entry.get("key", "<no key>")
     doi = entry.get("doi")
     arxiv = entry.get("arxiv")
@@ -170,7 +283,7 @@ def check_citation(entry: dict[str, Any]) -> CitationResult:
 
     if doi:
         # existence + metadata (not covered by citeguard)
-        meta, err = fetch_crossref_metadata(doi)
+        meta, err = fetch_crossref_metadata(doi, use_cache=use_cache)
         if err == "not_found" or meta is None:
             return CitationResult(key, "doi", doi, "NOT_FOUND",
                                    error=err or "no metadata returned",
@@ -187,7 +300,7 @@ def check_citation(entry: dict[str, Any]) -> CitationResult:
         # retraction status -- delegate to citeguard, do not reimplement
         try:
             import citeguard
-            status = citeguard.check_doi(doi)
+            status = citeguard.check_doi(doi, cache=citeguard_cache)
             retraction_signals = [
                 f"{s.type.value} via {s.source} ({s.date}) -> {s.notice_doi}"
                 for s in status.signals
@@ -205,7 +318,7 @@ def check_citation(entry: dict[str, Any]) -> CitationResult:
                                latency_ms=(time.monotonic() - t0) * 1000)
 
     # arXiv path
-    meta, err = fetch_arxiv_metadata(arxiv)
+    meta, err = fetch_arxiv_metadata(arxiv, use_cache=use_cache)
     if err == "not_found" or meta is None:
         return CitationResult(key, "arxiv", arxiv, "NOT_FOUND",
                                error=err or "no metadata returned",
@@ -280,11 +393,17 @@ def main(argv: list[str] | None = None) -> int:
     p_check.add_argument("--fail-on", choices=["never", "drift", "not_found", "retracted"],
                           default="not_found")
     p_check.add_argument("--json-out", type=Path, default=None)
+    p_check.add_argument("--no-cache", action="store_true",
+                          help="bypass the on-disk cache (e.g. to force a fresh retraction check)")
     args = ap.parse_args(argv)
 
     entries = [json.loads(line) for line in args.path.read_text(encoding="utf-8").splitlines()
                if line.strip() and not line.strip().startswith("//")]
-    results = [check_citation(e) for e in entries]
+    cg_cache = _citeguard_cache(enabled=not args.no_cache)
+    results = [check_citation(e, use_cache=not args.no_cache, citeguard_cache=cg_cache)
+               for e in entries]
+    if cg_cache is not None:
+        cg_cache.save()
 
     print(render_report(results))
 

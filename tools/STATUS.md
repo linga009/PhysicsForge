@@ -13,6 +13,53 @@ converted to hard automation — see "What stays prompt-only" below, and why.
 
 ---
 
+## Tool 0 — `prereg.sh`
+
+Vendored from [`K-Dense-AI/science-superpowers`](https://github.com/K-Dense-AI/science-superpowers)
+(MIT), adapted only in its default `PREREG_DIR`/`DEFAULT_RESULTS` paths for
+this repo's layout — not reimplemented, per "don't reinvent, don't blindly
+copy": the mechanism (git commit *ancestry*, via `git merge-base
+--is-ancestor`, which can't be forged by editing timestamps the way raw
+commit dates can) was already correctly designed. This is the piece flagged
+last round as architecturally different from everything else here:
+*prevention* of post-hoc parameter/hypothesis adjustment, not after-the-fact
+detection.
+
+**Fully validated end-to-end in a real git repo** (the `linga009/PhysicsForge`
+clone, on an unpushed local branch `tool/pre-registration`), using a genuinely
+fresh claim never before numerically computed in this project: the
+$^{13}$C-isotope $T_c$ shift implied by `Narlagiri_Superconductivity_Thesis_v4`'s
+falsification chapter ($T_c\propto M^{-\alpha}$, $\alpha\approx0.5$).
+
+1. Wrote the prediction (range 3.5–4.5% decrease, from a linear approximation)
+   into `preregistrations/2026-09-28-isotope-shift.md`.
+2. `prereg.sh freeze` — committed it as the file's first commit.
+3. *Only then* computed the exact value via `sympy`: **−3.9355%**. Confirmed:
+   correct sign, inside the registered range.
+4. Committed the result under `results/`. `prereg.sh audit` → **PASS** (FROZEN,
+   STAMP, INTEGRITY, CHRONOLOGY all green).
+5. **Adversarial test**: edited the registered range *after* seeing the
+   answer (simulating exactly the dishonest move this tool exists to
+   prevent — narrowing 3.5–4.5% down to 3.9–4.0% once −3.94% was known).
+   `prereg.sh audit` → **correctly FAILed**, showing the exact diff and the
+   right reason ("Edited after freeze"). Exit code 1, as it should be for CI
+   gating.
+6. Restored the frozen content; audit returned to PASS.
+
+**One real bug found**: `freeze`, invoked with a relative path from this
+session's particular temp-directory layout, spuriously warned the file was
+"outside preregistrations/" even though it wasn't — looks like a Windows
+temp-path aliasing quirk between `git rev-parse --show-toplevel`'s output and
+the shell's own path resolution, not a logic error in the script (the
+downstream `audit` command, which resolves paths differently, was unaffected
+and worked correctly throughout). Noted, not hidden; not yet root-caused.
+
+**Not yet done**: no `results/`-path convention has been agreed for actual
+physics derivations (the test above used a throwaway `results/` folder); no
+guidance yet in `anti-fabrication.md` or `SKILL.md` on *when* pre-registration
+is warranted (every Conjecture? only ones with a numeric decision rule?) —
+that integration is the next step, not this one.
+
 ## Tool 1 — `citation_guard.py`
 
 Implements `references/citation-guard.md`'s verdict taxonomy (`VERIFIED` /
@@ -29,9 +76,23 @@ clean citations, real retracted ones, deliberately mis-stated metadata,
 fabricated identifiers). One real bug caught and fixed in the process (an
 `http`→`https` redirect silently misclassifying a real paper as not-found).
 
-**Not built yet**: retry/resilience, caching, packaging, CI wiring, fuzzy
-title-search for identifier-less citations (`AMBIGUOUS`). See inline
-comments; not hidden.
+**Hardened since the first build** (real, tested, not just added): retry with
+exponential backoff + jitter on transient failures (connection errors, 5xx),
+honoring `Retry-After` on 429s; 404s are *not* retried (a real answer, not a
+failure); a 24h-TTL on-disk cache (`--no-cache` to bypass). Validated with a
+deterministic test suite (`test_retry.py`, 12/12, using an injected fetcher
+and fake clock rather than hoping the real network is flaky on demand — see
+"determinism before deltas") that caught one real bug in the process: `_Cache
+.put()` didn't recreate its directory if it had been removed since `__init__`,
+so every cache write after a `rm -rf .citation_cache` failed silently until
+fixed. A second real gap was found and fixed the same way: `citeguard.check_doi()`
+accepts an injectable cache (`citeguard.FileCache`) that wasn't being used, so
+its own internal Crossref calls were uncached — wiring it in took a warm run
+on the golden set from ~44% faster (only our own cache) to **6.5× faster**
+(10.1s → 1.5s), with identical, correct results.
+
+**Still not built**: packaging, CI wiring, fuzzy title-search for
+identifier-less citations (`AMBIGUOUS`). See inline comments; not hidden.
 
 **From researching `gallantlab/literature-review-toolkit`** (a close relative
 of what this tool does): they found search agents get roughly 1 in 4
@@ -66,6 +127,16 @@ object, not something with a `.dimension` attribute), and a spurious extra
 the wrong reason. Both are documented in the commit/session history, not
 just silently patched.
 
+**Now packaged properly**: the six claims above live in `test_deriv_check.py`
+as a standalone, zero-framework regression suite (`python test_deriv_check.py`),
+with claim 6 correctly framed as a meta-level assertion ("the tool correctly
+rejects this", not "this claim is true") so a future CI failure there means
+the *checker* broke, not that the physics changed. `deriv_check.py` itself is
+now a clean library with no demo `__main__` block — see its own docstring for
+why it deliberately has no CLI beyond that (the actual caller is Claude,
+writing Python during Phase 5 Symbolic Verification, not a generic
+expression-description file format with no demonstrated need).
+
 ## Tool 3 — `quantum_check.py`
 
 QuTiP-backed checks for unitarity, CPTP (complete positivity + trace
@@ -79,7 +150,18 @@ kept visible deliberately — calibration and validation are not the same
 evidentiary strength (Pólya Pattern 2, `plausible-reasoning.md`). A
 deliberately incomplete Kraus set was included to confirm the tool can
 actually fail, not just rubber-stamp: it failed by exactly the expected
-magnitude (the missing term's own weight, 0.15 = p/4 at p=0.3).
+magnitude — corrected here from an earlier, slightly wrong report: the
+deviation is `dim * (missing term's weight)` under QuTiP's default trace
+norm (0.15 = 2 × 0.075 at $p=0.3$, dim 2), not the missing weight alone as
+first stated. Caught and fixed while writing `test_quantum_check.py`, by
+computing the expected deviation independently rather than trusting the
+first guess — exactly the kind of small, easy-to-miss error this whole
+exercise exists to catch, including in its own prior claims.
+
+**Now packaged properly**: `test_quantum_check.py` is a standalone,
+zero-framework regression suite (6/6), separated from `quantum_check.py`
+itself, which is now a clean library with no demo `__main__` block — mirroring
+the same treatment given to `deriv_check.py` / `test_deriv_check.py`.
 
 ---
 
@@ -121,7 +203,12 @@ stays prompt-only" below for why that's the right line, not a shortcut.
   chased further given this session's repeated first-hand experience of how
   costly toolchain installs get on this platform.
 - **EinsteinPy** (pure-Python GR tensor calculus, directly relevant to the
-  Kerr geodesics paper) — install attempted, in progress; report pending.
+  Kerr geodesics paper) — **installed successfully** (`einsteinpy==0.4.0`,
+  pulling in `astropy`, `numba`, `plotly`). Not yet validated against any
+  real claim from `kerr_elliptic_thesis_v2_corrected.tex` — that paper's
+  actual Christoffel-symbol/geodesic-equation content hasn't been checked
+  against it yet. Natural next candidate for a `deriv_check.py`-style
+  validation pass, not done this round.
 - **SageMath, Maxima, GAP** — researched, not attempted. SageMath in
   particular is known to be very difficult to install natively on Windows
   without WSL; given this session's own LaTeX-toolchain saga, installing it
@@ -151,7 +238,7 @@ already proven via `deriv_check.py`'s symbolic route above. Formalizing that
 one claim would be a real, bounded pilot before deciding whether the
 toolchain cost is worth paying for more.
 
-### K-Dense (`K-Dense-AI` on GitHub) — the most valuable single finding
+### K-Dense (`K-Dense-AI` on GitHub) — the most valuable single finding, now built (see Tool 0 above)
 `science-superpowers`' methodology replaces **detecting** bad practice after
 the fact with **preventing** it structurally: predictions, hypotheses, and
 decision rules are locked *before* results are seen ("pre-registration over
@@ -163,10 +250,11 @@ in this directory, and `anti-fabrication.md` itself, catches bad results
 *after* they're produced. Pre-registration prevents the specific failure mode
 `anti-fabrication.md` Mode 2 (Parameter Adjustment) exists to catch, by making
 it structurally visible in git history if a prediction was written down after
-the fact rather than before. **This is the strongest candidate for what to
-build next** — stronger than another verification library, because it's
-architecturally different from everything built so far, not just more
-coverage of the same kind.
+the fact rather than before. This was built and validated end-to-end this
+round (Tool 0, above) — including a real adversarial test where a post-hoc
+edit was made and correctly caught. It remains architecturally different from
+everything else in this directory, and from `anti-fabrication.md` itself:
+prevention, not after-the-fact detection.
 
 `scientific-agent-skills` also confirmed something useful in the negative:
 its 165 skills cover citation/literature management and domain databases
