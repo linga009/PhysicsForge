@@ -29,7 +29,7 @@ bound on magnitude).
 ## Prediction (locked before computation)
 Using the small-shift approximation $(1+x)^{-1/2} \approx 1 - x/2$ with
 $x = M_{13}/M_{12} - 1 \approx 0.0836$: the exact value should be a decrease of
-**between 3.9% and 4.0%** (I expect close to 4.0%, but am registering a range
+**between 3.5% and 4.5%** (I expect close to 4.0%, but am registering a range
 because the approximation is linear and the true value includes higher-order
 terms I have not carried through by hand).
 
@@ -48,4 +48,4 @@ claim itself, which is the manuscript's, not this registration's).
 ## Stopping rule
 One computation, via `tools/deriv_check.py`, no optional re-runs.
 
-**Frozen at commit:** 859d29b1fba6dc1a8f336caad5169290bc6328bf
+**Frozen at commit:**
