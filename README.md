@@ -304,6 +304,8 @@ Status of RH: Open. This paper does not advance it.
 
 The full example, including the dependency graph and Pauli Protocol output, lives in [`skill/references/examples.md`](./skill/references/examples.md).
 
+**A real one, not a synthetic one:** Example 4 in [`skill/references/examples.md`](./skill/references/examples.md) walks through an author auditing his own unpublished superconductivity preprint. Its central claim — that a certain (λ, ω_log) parameter region is "empty" — turns out to be falsified by a real, cited material (LaH₁₀) sitting inside that same region. Every disputed number in the audit was checked against Crossref and the source paper's own tables, not recalled from memory. It's the clearest illustration in this repo of what "audits research papers line-by-line" actually looks like on real (if unpublished) work.
+
 ## Use cases
 
 PhysicsForge is built for:
