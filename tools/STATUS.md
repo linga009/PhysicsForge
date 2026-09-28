@@ -11,29 +11,34 @@ instead of asserted in prose. The judgment-heavy protocols (Pauli reasoning
 itself, ScholarEval, adversarial review, Discovery Engine) are not being
 converted to hard automation — see "What stays prompt-only" below, and why.
 
-**On a local, unpushed branch** (`tool/pre-registration` on the
-`linga009/PhysicsForge` clone) — nothing in this directory has been pushed to
-GitHub. Pushing and opening a PR is a separate, explicit decision, not implied
-by any of the work described here.
+**Pushed.** Branch `tool/pre-registration` on `linga009/PhysicsForge`, PR #2:
+<https://github.com/linga009/PhysicsForge/pull/2>. Not yet merged — that's
+still a separate, explicit decision. "Wired into CI" and "observed passing
+in CI" were kept as different claims right up until they became the same
+claim, for real — see below.
 
 ## CI — `.github/workflows/tools-ci.yml`
 
-Three jobs: `test-tools` runs the three deterministic suites below on every
+Three jobs: `test-tools` runs the four deterministic suites below on every
 push/PR touching `tools/`; `citation-spot-check` runs `citation_guard.py`
 against the real golden set (network required, so `continue-on-error: true`
-— a transient Crossref outage shouldn't block an unrelated PR); `prereg-audit`
-runs `prereg.sh audit` against any tracked pre-registration, so a human
-forgetting to audit locally before claiming a confirmatory result doesn't
-slip through.
+— a Crossref issue shouldn't block an unrelated PR); `prereg-audit` runs
+`prereg.sh audit` against any tracked pre-registration, so a human forgetting
+to audit locally before claiming a confirmatory result doesn't slip through.
 
-**Honestly**: the YAML is syntactically valid (parsed with `pyyaml`), each
-`pip install` target was individually confirmed installable this session, and
-every step was run manually in the exact tree that would be checked out
-(including `prereg.sh audit` from the repo root, the CI job's exact
-invocation). What that is *not* the same as: this workflow has never actually
-executed on GitHub's own runners, because nothing has been pushed yet. "Wired
-into CI" and "observed passing in CI" are different claims — only the first
-is true right now.
+**Observed running for real**, on both the initial push and the resulting
+PR (#2), consistently across both runs:
+
+| Job | Result | Notes |
+|---|---|---|
+| `test-tools` | **PASS** (51s) | All four suites (`test_retry.py`, `test_deriv_check.py`, `test_quantum_check.py`, `test_kerr_check.py`) genuinely green on GitHub's own runners, not just locally. |
+| `prereg-audit` | **PASS** (5–6s) | `prereg.sh audit` correctly verified the isotope-shift pre-registration from real commit history on a fresh Ubuntu runner. |
+| `citation-spot-check` | **FAIL** (13–14s), both runs | A Crossref call returned `http_406`, consistently, on both the push and PR-triggered runs — not a one-off flake. `406` isn't in `citation_guard.py`'s retryable set (`429, 500, 502, 503, 504`), so it wasn't retried. Most likely cause: Crossref treating GitHub Actions' shared runner IP ranges differently than a residential/local IP — this was never observed locally. `continue-on-error: true` worked exactly as designed: the overall workflow still reports **success**, and the PR is not blocked by it. Not yet fixed — a real, open, documented limitation, not a guessed one. |
+
+This is the actual point where "wired into CI" and "observed passing in CI"
+stopped being different claims. The one real gap it surfaced (Crossref's
+apparent behavior toward CI IP ranges) is exactly the kind of thing that
+would have stayed invisible without actually pushing and watching it run.
 
 ---
 
