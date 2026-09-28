@@ -231,6 +231,139 @@ expected limits, matches numerical values, and is manifestly Lorentz invariant.
 
 ---
 
+## EXAMPLE 4 — A Real Self-Audit, With External Verification
+
+Examples 1–3 are illustrative. This one is real: an author (Linga Murthy Narlagiri)
+used the audit workflow on his own unpublished draft, *"Phonon-Mediated
+Superconductivity in LaMgC₂ Clathrates."* Unlike Examples 1–3, every number below
+was independently recomputed (`ad_validate.py`, reproducing the Allen–Dynes formula
+in Python) and every reference was checked against Crossref and the source paper's
+own text, not asserted from memory. This is what the audit workflow looks like
+against a real literature base rather than a synthetic strawman.
+
+### User request
+*"Audit this paper's central claim."* [draft claims the (λ, ω_log) parameter region
+needed for Tc = 300 K is "empty" — i.e. unreachable by any real material]
+
+### Output (excerpt)
+
+```
+═══════════ PAPER CRITIQUE ═══════════
+Author's claim: "The target region is empty" — no (λ, ω_log, μ*) combination
+reachable by real matter gives Tc = 300 K in this compound class.
+
+CLAIM INVENTORY
+═══════════════
+[C1] (Theorem-claimed)  Allen–Dynes Eq. gives Tc = 300 K only for (λ, ω_log) pairs
+                          that no known material occupies.
+[C2] (Heuristic)         Diamond's Debye temperature (2230 K) bounds ω_log for any
+                          light-element compound; used to reject the low-λ rows.
+[C3] (Established)       λ_c ≈ 3.0–3.7 bounds where Migdal–Eliashberg theory itself
+                          holds [Yuzbashyan & Altshuler, PRB 106, 054518 (2022)].
+[C4] (Theorem-claimed)   Allen–Dynes over-predicts Nb by 1.8× and H₃S by 1.5×,
+                          used to argue the formula carries no safety margin.
+
+DERIVATION AUDIT
+════════════════
+Target-Tc inversion table (λ = 1.5–4.5, μ* = 0.10–0.16):
+  ✓ Recomputed independently. C(1.5, 0.13) = 1.335701 K/meV, matching the
+    manuscript to all six printed digits. The arithmetic is correct.
+
+C2 — "diamond bounds ω_log at 2230 K":
+  ✗ Wrong quantity. 2230 K is a Debye temperature (a heat-capacity fit), not a
+    phonon-frequency ceiling. Diamond's actual highest optical mode is the
+    1332 cm⁻¹ Raman line = 165 meV = 1917 K [Warren, Yarnell, Dolling & Cowley,
+    Phys. Rev. 158, 805 (1967)] — already below the value used.
+  ✗ Also not the tightest bound available: the C≡C stretch of the acetylide
+    CaC₂ sits at 1864 cm⁻¹ = 231 meV [Zheng et al., Chem. Sci. 8, 298 (2017)],
+    stiffer than diamond. "Diamond is the stiffest lattice" is false as stated.
+
+C1 — "the region is empty":
+  ✗ Contradicted by a known material. Full-Eliashberg calculations for LaH₁₀
+    give λ ≈ 3.4–3.9, ω_log ≈ 69–78 meV, Tc = 246–271 K at 170–210 GPa
+    [Kruglov et al., Phys. Rev. B 101, 024508 (2020), Table 1] — inside the
+    same corner of (λ, ω_log) space the manuscript's own table requires for
+    Tc = 300 K at λ ≈ 3–4.5. A region containing a real, measured near-neighbour
+    cannot be called empty; it can only be argued unreachable *without hydrogen*.
+
+C4 — "Allen–Dynes over-predicts by 1.8× / 1.5×":
+  ✗ Unsourced input. The 23 meV used as ω_log(Nb) is the energy of niobium's
+    highest phonon peak [Zarea, Ueki & Sauls, Front. Phys. 11, 1269872 (2023)],
+    not the logarithmic average — ω_log is necessarily lower than the spectrum's
+    peak. Using a peak as an average manufactures the "over-prediction."
+  ✗ Opposite sign found on a controlled test. Applying Allen–Dynes to Kruglov's
+    own (λ, ω_log) for LaH₁₀ *under*-predicts the full-Eliashberg Tc by 26–30%
+    (182 K vs 259 K at 170 GPa; 174 K vs 249 K at 210 GPa) — not over-predicts.
+  ⚠ Formula accuracy is input-bottlenecked, not fixed-bias: the same equation
+    applied to H₃S spans 201–270 K depending only on whether the phonon
+    spectrum came from a PBE or PBE0 functional [Komelj & Krakauer, Phys. Rev. B
+    92, 205125 (2015)] — a ~25% swing from DFT choice alone.
+
+HIDDEN ASSUMPTION
+═════════════════
+The "empty region" conclusion silently assumes Allen–Dynes has a single,
+known-direction bias that can be used to sign off on exclusion. The controlled
+comparison above shows the bias is input-dependent and, for λ ≳ 3, is a roughly
+25–30% *under*-prediction — the opposite direction from what C4 implied.
+
+VERDICT
+═══════
+"The region is empty" does not survive: LaH₁₀ is a counterexample sitting inside
+the same parameter corner the paper claims is unreachable. The defensible, narrower
+claim is that *this specific compound* is disfavoured — it has no hydrogen and its
+dominant mass (La, 138.9 u) sets a heavy, soft framework — while the high-λ rows sit
+at or beyond λ_c (C3, correctly used) and the low-λ rows still require 79–99% of the
+total coupling to sit in a single stiff mode (a weighted-mean bound, not the
+diamond-Debye argument used originally).
+
+Status of the claim: the "empty" framing is falsified by a cited counterexample.
+The "disfavoured, for three independent and individually weaker reasons" framing
+survives and is what the revised manuscript now states.
+
+PAULI PROTOCOL applied to author's claim "the target region is empty"
+═════════════════════════════════════════════
+[1] Falsifiability:    PASS (falsifiable) — and in fact FALSIFIED (see C1 audit)
+[2] Restatement:       FAIL — "empty" restates as "empty for hydrides too",
+                        which is false; the intended claim was narrower
+[3] Hidden assumption: FAIL — assumed Allen–Dynes bias direction, untested
+[4] Symmetry:          N/A
+[5] Dimensional:       FAIL in one printed display equation (k_B silently
+                        dropped, energy returned where a temperature was
+                        claimed) though the tabulated numbers were computed
+                        correctly; corrected in the revision
+[6] Limiting case:     FAIL — the known LaH₁₀ limiting case, which sits inside
+                        the claimed-empty region, was not checked against it
+[7] Peer-review:       FAIL — a referee working on hydride superconductivity
+                        would cite LaH₁₀ as an immediate counterexample
+═════════════════════════════════════════════
+
+Recommendation: downgrade "the target region is empty" to "the target region is
+occupied only by hydrides; this compound is disfavoured for three stated, weaker
+reasons — mass mismatch, a mean-value bound on ω_log, and proximity to λ_c — none
+of which alone is decisive." Ship the falsification checklist and the DFPT
+calculation that would settle it, rather than the stronger unsupported claim.
+═════════════════════════════════════
+```
+
+### What this demonstrates
+
+- The audit changed the paper's actual conclusion, not just its wording: "empty"
+  (false) became "occupied only by hydrides, and this candidate is disfavoured"
+  (defensible) — a materially weaker and more honest claim.
+- Every corrected number came from checking a primary source (Crossref DOI lookup
+  plus reading the cited paper's own table), not from the auditor's memory.
+- A claim can be internally consistent (the arithmetic was right) and still be
+  false, because the error was in an input value, not the formula.
+- Reusing a spectral *peak* as if it were a *logarithmic average* is a specific,
+  checkable error pattern worth watching for in any paper quoting Allen–Dynes,
+  McMillan, or similar phonon-averaged formulas.
+- The corrected manuscript — Narlagiri, *"Phonon-Mediated Superconductivity in
+  LaMgC₂ Clathrates"* (2026) — carries its own revision-notes appendix with the
+  itemised diff against the earlier draft, so a reader can verify every claim
+  above against the primary text rather than this summary.
+
+---
+
 ## HOW TO USE THESE EXAMPLES
 
 When generating output, mentally compare against these:
@@ -241,6 +374,9 @@ When generating output, mentally compare against these:
   argument is hand-wavy". Match this specificity.
 - **Multiplicity of checks**: Example 3 runs six verification angles. Don't run
   one and call it verified.
+- **External grounding**: Example 4 shows every disputed number resolved against
+  a primary source (a DOI, a table in the cited paper) rather than an internal
+  re-derivation alone. When a claim rests on an external fact, go check the fact.
 
 If your draft response would not pass these standards, rewrite it before
 sending to the user.
