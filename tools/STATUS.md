@@ -11,6 +11,30 @@ instead of asserted in prose. The judgment-heavy protocols (Pauli reasoning
 itself, ScholarEval, adversarial review, Discovery Engine) are not being
 converted to hard automation — see "What stays prompt-only" below, and why.
 
+**On a local, unpushed branch** (`tool/pre-registration` on the
+`linga009/PhysicsForge` clone) — nothing in this directory has been pushed to
+GitHub. Pushing and opening a PR is a separate, explicit decision, not implied
+by any of the work described here.
+
+## CI — `.github/workflows/tools-ci.yml`
+
+Three jobs: `test-tools` runs the three deterministic suites below on every
+push/PR touching `tools/`; `citation-spot-check` runs `citation_guard.py`
+against the real golden set (network required, so `continue-on-error: true`
+— a transient Crossref outage shouldn't block an unrelated PR); `prereg-audit`
+runs `prereg.sh audit` against any tracked pre-registration, so a human
+forgetting to audit locally before claiming a confirmatory result doesn't
+slip through.
+
+**Honestly**: the YAML is syntactically valid (parsed with `pyyaml`), each
+`pip install` target was individually confirmed installable this session, and
+every step was run manually in the exact tree that would be checked out
+(including `prereg.sh audit` from the repo root, the CI job's exact
+invocation). What that is *not* the same as: this workflow has never actually
+executed on GitHub's own runners, because nothing has been pushed yet. "Wired
+into CI" and "observed passing in CI" are different claims — only the first
+is true right now.
+
 ---
 
 ## Tool 0 — `prereg.sh`
@@ -91,8 +115,10 @@ its own internal Crossref calls were uncached — wiring it in took a warm run
 on the golden set from ~44% faster (only our own cache) to **6.5× faster**
 (10.1s → 1.5s), with identical, correct results.
 
-**Still not built**: packaging, CI wiring, fuzzy title-search for
-identifier-less citations (`AMBIGUOUS`). See inline comments; not hidden.
+**Still not built**: packaging (no `pyproject.toml` / console entry point),
+fuzzy title-search for identifier-less citations (`AMBIGUOUS`). CI wiring
+exists now — see the "CI" section above — though not yet observed running for
+real. See inline comments; not hidden.
 
 **From researching `gallantlab/literature-review-toolkit`** (a close relative
 of what this tool does): they found search agents get roughly 1 in 4
@@ -163,6 +189,46 @@ zero-framework regression suite (6/6), separated from `quantum_check.py`
 itself, which is now a clean library with no demo `__main__` block — mirroring
 the same treatment given to `deriv_check.py` / `test_deriv_check.py`.
 
+## Tool 4 — `test_kerr_check.py`
+
+A from-first-principles validation of `kerr_elliptic_thesis_v2_corrected.tex`'s
+central claimed result: that the Hamilton-Jacobi equation for Kerr null
+geodesics separates into a radial potential $R(r)$ and angular potential
+$\Theta(\theta)$. Not "does this match a textbook" (the paper already cites
+Carter 1968 and Gralla & Lupsasca 2020 for that) but "does the paper's printed
+$R(r)$ genuinely fall out of the real Kerr inverse metric, derived
+independently here" — using EinsteinPy's actual `Kerr()` tensor, not a
+hand-typed metric.
+
+**8/8, including a direct test of separability itself** (the mixed partial
+derivative $\partial^2 B'/\partial r\,\partial\theta$ of the Hamilton-Jacobi
+bracket vanishes identically — checked from the metric, not assumed via
+Carter's ansatz), and the paper's own $(\xi,\eta)$-normalized $R(r)$ matching
+the derivation to exact symbolic zero.
+
+**Three real bugs, all in the derivation code, none in the paper's physics**
+— documented in the file's own docstring since they're instructive:
+1. `Kerr()` builds its own internal `r, theta` symbols; an external
+   `Symbol("r", positive=True)` prints identically but is a different object,
+   so `.subs()` against it silently no-ops. Caught by a `TypeError: Cannot
+   convert expression to float` rather than a wrong number — worse, it could
+   easily have produced a *plausible-looking wrong answer* if the
+   substitution had partially worked instead of failing loudly.
+2. `sympy.simplify(diff) == 0` gave **False** for expressions later confirmed
+   (by direct numeric substitution) to be exactly equal — `simplify` is a
+   heuristic, not a decision procedure, and `.equals(0)` even returned `None`
+   once. Numeric substitution at a random point is what actually caught this;
+   the "robust" symbolic method was the less trustworthy one here.
+3. A genuine sign error in the derivation's own algebra (not the metric):
+   working through the Hamilton-Jacobi equation with an unverified assumption
+   about which inverse-metric components are negative produced a result that
+   was the exact negative of the paper's $R(r)$ — caught by testing against
+   both $+R$ and $-R$ rather than assuming the derivation was right because
+   it "looked like" the standard form.
+
+Runtime: 25s (down from >60s before deduplicating a redundant symbolic matrix
+inversion across test functions — measured, not assumed to have helped).
+
 ---
 
 ## Pauli Protocol — which checks are now tool-backed
@@ -175,16 +241,17 @@ likely remain, the model's own reasoning:
 |---|---|---|
 | [1] Falsifiability | Prompt-only. Judgment call about what a measurement would look like; not mechanically checkable. |
 | [2] Restatement-vs-solution | Prompt-only. Requires understanding what was actually asked. |
-| [3] Hidden assumption audit | Prompt-only, but `counterexample-protocol.md`'s lemma-incorporation step is a structured way to *find* one after the fact. |
+| [3] Hidden assumption audit | Prompt-only in general, but **tool-backed for the specific case of a claimed separability/factorization ansatz** — `test_kerr_check.py` verifies one directly via a vanishing mixed partial derivative, from the real metric, not by assuming the ansatz already worked. `counterexample-protocol.md`'s lemma-incorporation step covers the general case of finding a hidden assumption after the fact. |
 | [4] Conservation/symmetry laws | Partially tool-backed for specific cases — `quantum_check.py` can verify unitarity/CPTP (a conservation-adjacent property) numerically; general symmetry reasoning is not automatable in general. |
 | [5] Dimensional consistency | **Tool-backed.** `deriv_check.py`, real `sympy.physics.units`. |
 | [6] Limiting case recovery | **Tool-backed** for exact/symbolic reductions and stated numeric targets. `deriv_check.py`. |
 | [7] Peer-review survival | Prompt-only, and arguably should stay that way — this is `breakthrough-red-flags.md` and `scholar-eval.md` territory, judgment about a social process, not a mechanical fact. |
 
-**Two of seven** are now genuinely tool-backed rather than self-reported; one
-more is partially covered in the quantum-mechanics case. The other four are
-judgment calls by nature, not gaps left unfilled by laziness — see "what
-stays prompt-only" below for why that's the right line, not a shortcut.
+**Two of seven are fully tool-backed** ([5], [6]); **two more are tool-backed
+for specific, narrower cases** ([3] for a claimed separability ansatz, [4] for
+quantum unitarity/CPTP) rather than in general. The other three are judgment
+calls by nature, not gaps left unfilled by laziness — see "what stays
+prompt-only" below for why that's the right line, not a shortcut.
 
 ---
 
@@ -202,13 +269,9 @@ stays prompt-only" below for why that's the right line, not a shortcut.
   It ships primarily via conda or Linux binaries. Real negative result, not
   chased further given this session's repeated first-hand experience of how
   costly toolchain installs get on this platform.
-- **EinsteinPy** (pure-Python GR tensor calculus, directly relevant to the
-  Kerr geodesics paper) — **installed successfully** (`einsteinpy==0.4.0`,
-  pulling in `astropy`, `numba`, `plotly`). Not yet validated against any
-  real claim from `kerr_elliptic_thesis_v2_corrected.tex` — that paper's
-  actual Christoffel-symbol/geodesic-equation content hasn't been checked
-  against it yet. Natural next candidate for a `deriv_check.py`-style
-  validation pass, not done this round.
+- **EinsteinPy** (pure-Python GR tensor calculus) — installed
+  (`einsteinpy==0.4.0`) and now **used for a real from-first-principles
+  validation** — see Tool 4 below.
 - **SageMath, Maxima, GAP** — researched, not attempted. SageMath in
   particular is known to be very difficult to install natively on Windows
   without WSL; given this session's own LaTeX-toolchain saga, installing it

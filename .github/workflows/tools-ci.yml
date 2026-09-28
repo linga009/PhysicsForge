@@ -32,7 +32,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install sympy qutip citeguard-cli
+          pip install sympy qutip citeguard-cli einsteinpy
 
       - name: test_retry.py -- citation_guard.py retry/cache logic (deterministic, no network)
         working-directory: tools
@@ -45,6 +45,10 @@ jobs:
       - name: test_quantum_check.py -- QuTiP calibration against canonical QM/QI facts
         working-directory: tools
         run: python test_quantum_check.py
+
+      - name: test_kerr_check.py -- Kerr separability derived from the real EinsteinPy metric (~25s)
+        working-directory: tools
+        run: python test_kerr_check.py
 
   citation-spot-check:
     # Separate job: this one DOES hit the real network (Crossref, arXiv), so
