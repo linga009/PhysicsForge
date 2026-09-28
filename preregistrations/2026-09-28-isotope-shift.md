@@ -48,4 +48,4 @@ claim itself, which is the manuscript's, not this registration's).
 ## Stopping rule
 One computation, via `tools/deriv_check.py`, no optional re-runs.
 
-**Frozen at commit:**
+**Frozen at commit:** 859d29b1fba6dc1a8f336caad5169290bc6328bf
