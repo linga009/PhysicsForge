@@ -1,0 +1,20 @@
+{
+  "name": "physicsforge",
+  "displayName": "PhysicsForge",
+  "version": "3.0.0",
+  "description": "High-fidelity physics and mathematics research engine: gap analysis, formula prediction, derivation with mandatory self-audit, paper auditing with the Pauli Protocol, and real test-backed verification tools for citations, derivations, quantum-information claims, and pre-registration.",
+  "author": {
+    "name": "linga009"
+  },
+  "homepage": "https://github.com/linga009/PhysicsForge",
+  "repository": "https://github.com/linga009/PhysicsForge",
+  "license": "MIT",
+  "keywords": [
+    "physics",
+    "mathematics",
+    "research",
+    "derivation",
+    "citation-verification",
+    "peer-review"
+  ]
+}

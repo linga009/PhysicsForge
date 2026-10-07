@@ -1,0 +1,13 @@
+{
+  "name": "physicsforge-marketplace",
+  "owner": {
+    "name": "linga009"
+  },
+  "plugins": [
+    {
+      "name": "physicsforge",
+      "source": "./",
+      "description": "High-fidelity physics and mathematics research engine with real test-backed verification tools."
+    }
+  ]
+}
