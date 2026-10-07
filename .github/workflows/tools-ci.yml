@@ -1,20 +1,20 @@
 name: tools-ci
 
-# Runs the real, tool-backed verifiers in tools/ against their regression
+# Runs the real, tool-backed verifiers in scripts/ against their regression
 # suites on every push and PR -- this is the actual "eval suite wired into
 # CI as a regression gate" step from idea-to-production-tool's hardening
 # checklist. It does not touch the prompt-only PhysicsForge protocols
-# (Pauli reasoning, ScholarEval, adversarial review) -- see tools/STATUS.md
+# (Pauli reasoning, ScholarEval, adversarial review) -- see scripts/STATUS.md
 # for why those stay judgment calls rather than being hard-automated here.
 
 on:
   push:
     paths:
-      - "tools/**"
+      - "scripts/**"
       - ".github/workflows/tools-ci.yml"
   pull_request:
     paths:
-      - "tools/**"
+      - "scripts/**"
       - ".github/workflows/tools-ci.yml"
   workflow_dispatch: {}
 
@@ -35,19 +35,19 @@ jobs:
           pip install sympy qutip citeguard-cli einsteinpy
 
       - name: test_retry.py -- citation_guard.py retry/cache logic (deterministic, no network)
-        working-directory: tools
+        working-directory: scripts
         run: python test_retry.py
 
       - name: test_deriv_check.py -- real claims from this project's manuscripts
-        working-directory: tools
+        working-directory: scripts
         run: python test_deriv_check.py
 
       - name: test_quantum_check.py -- QuTiP calibration against canonical QM/QI facts
-        working-directory: tools
+        working-directory: scripts
         run: python test_quantum_check.py
 
       - name: test_kerr_check.py -- Kerr separability derived from the real EinsteinPy metric (~25s)
-        working-directory: tools
+        working-directory: scripts
         run: python test_kerr_check.py
 
   citation-spot-check:
@@ -65,7 +65,7 @@ jobs:
           python-version: "3.12"
       - run: pip install citeguard-cli
       - name: citation_guard.py against the real golden set (network required)
-        working-directory: tools
+        working-directory: scripts
         run: python citation_guard.py check golden_citations.jsonl --fail-on retracted
 
   prereg-audit:
@@ -82,7 +82,7 @@ jobs:
       - name: prereg.sh audit (skips cleanly if no preregistrations exist yet)
         run: |
           if ls preregistrations/*.md >/dev/null 2>&1; then
-            sh tools/prereg.sh audit
+            sh scripts/prereg.sh audit
           else
             echo "No pre-registrations under preregistrations/ yet -- nothing to audit."
           fi
