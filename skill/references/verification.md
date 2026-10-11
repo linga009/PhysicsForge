@@ -2,6 +2,10 @@
 
 How to verify derivations computationally using sympy and numerical sanity checks.
 
+> **Prefer the executable toolkit.** `scripts/pfv` (see [`verification-tools.md`](./verification-tools.md)) already implements
+> most of the patterns below as tested checks with exact verdicts, and adds number theory, group theory, algebra, inequalities,
+> probability and more. Use the raw sympy patterns here when `pfv` has no check for the question.
+
 ---
 
 ## WHEN TO VERIFY

@@ -85,6 +85,7 @@ The result is a model that can give you **actual partial advances**, **honest cr
 | **Derivation engine** | A 12-step schema: axioms → constraints → toolkit → step-by-step working → boxed result → physical interpretation → dimensional analysis → limiting cases → predictions → falsifiability → open threads → claim classification. |
 | **Paper auditing** | Eight-step workflow: intake → claim extraction → dependency graph → derivation audit → hidden assumption hunt → consistency checks → novelty assessment → remaining gap statement → proposed extension. |
 | **Symbolic verification** | Seven `sympy` patterns covering dimensional analysis, limiting cases, algebraic identities, sign conventions, integral / operator identities, tensor contractions, and known-formula recovery. |
+| **Executable verification toolkit (`pfv`)** | Tested Python checks for mathematics *and* physics: number theory, group theory, polynomial and linear algebra, analysis, inequalities (z3), probability, combinatorics, Lie algebras and anomalies, quantum information, GR and gauge theory, QFT gamma-matrix algebra, mechanics and thermodynamics, vector calculus, dimensional analysis, derivation chains. Four verdicts (REFUTED / VERIFIED / CONSISTENT / INCONCLUSIVE), refute-first workflow, planted-error test suite. See [`verification-tools.md`](./skill/references/verification-tools.md). |
 | **LaTeX manuscript engine** | Full document templates for `article`, `revtex4-2` (PRL), and `jheppub` classes with custom physics macros, theorem environments, Feynman diagrams (`tikz-feynman`), and BibTeX standards. |
 | **Domain modules** | Eleven domain-specific cheat sheets: QFT, GR, quantum gravity, Standard Model, QM foundations, thermodynamics, cosmology, condensed matter, PDE & harmonic analysis, geometric analysis, stochastic analysis & SPDE, plus a 15-row cross-domain bridge table. |
 | **Worked examples** | Three calibration targets: a finished PRL-style "Identifying the Gap" section, a paper-critique audit, a six-angle symbolic verification trace. |
@@ -141,11 +142,15 @@ physicsforge/
 ├── skill/                             ← Anthropic Skill format
 │   ├── SKILL.md                       ← dispatcher (identity, claim hierarchy,
 │   │                                     Millennium protocol, methodology, routing)
+│   ├── scripts/
+│   │   ├── pfv/                       ← executable verification toolkit (16 domains)
+│   │   └── tests/                     ← planted-error regression suite (python3 -m pfv selftest)
 │   └── references/                    ← loaded on-demand by SKILL.md
 │       ├── output-rules.md            ← anti-truncation rules, word counts
 │       ├── latex-engine.md            ← full LaTeX manuscript engine
 │       ├── paper-analysis.md          ← 8-step audit workflow
 │       ├── verification.md            ← 7 sympy verification patterns
+│       ├── verification-tools.md      ← menu and rules for the executable pfv toolkit
 │       ├── examples.md                ← 3 worked calibration examples
 │       └── domains.md                 ← 11 domain-specific cheat sheets
 │
@@ -326,6 +331,7 @@ It is **not** built for:
 PhysicsForge is a **structured prompting framework**, not an oracle. Specific limitations:
 
 - **The model is still an LLM.** It can hallucinate citations, get algebra wrong, and miss obvious errors. The framework reduces these failures but does not eliminate them. **Always verify critical claims independently.**
+- **The `pfv` checks verify statements, not models.** A VERIFIED result means the statement you typed is true; it does not say it is the statement you meant or that the physics is right. The toolkit's regression suite uses planted errors written by the toolkit's author, so it shows the checks catch those errors, not that they catch every error, and it does not by itself show that answers improve. Several checks (z3 integer reasoning, Monte Carlo, floating-point matrices) can only return CONSISTENT or INCONCLUSIVE.
 - **Symbolic verification has a finite reach.** `sympy` cannot verify functional analysis estimates, weak-solution existence, convergence of approximation schemes, topological claims, compactness arguments, or spectral gaps. The framework explicitly flags this in [`verification.md`](./skill/references/verification.md).
 - **Web search is not always available.** When literature reconnaissance is needed and the model cannot search, it works from training-data knowledge and flags claims with `[VERIFY]`. Recent papers will be missing.
 - **Code execution is not always available.** Without it, the model performs manual symbolic checks and marks unverified algebra with `[UNVERIFIED ALGEBRA]`.

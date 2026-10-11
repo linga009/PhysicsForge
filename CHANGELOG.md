@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `skill/scripts/pfv` — executable verification toolkit for mathematics and physics (16 domains, about 140 checks): number theory, group theory, Lie algebras and anomaly cancellation, quantum information, linear algebra, analysis, derivation chains, dimensional analysis, GR and gauge theory, mechanics and thermodynamics, combinatorics, polynomial algebra and Groebner ideals, probability and Markov chains, QFT gamma-matrix algebra and Ward identities, vector calculus in curvilinear coordinates, and z3-based decision procedures for real inequalities, integer constraints and propositional logic. Every check returns one of four verdicts (REFUTED, VERIFIED, CONSISTENT, INCONCLUSIVE); a finite check can refute a universal claim but a pass is only CONSISTENT.
+- `skill/scripts/tests` — planted-error regression suite (`python3 -m pfv selftest`): true claims must not be refuted, planted false claims must be refuted, nothing false may be VERIFIED; regression tests for each soundness bug found while red-teaming; a test that keeps `verification-tools.md` in step with the code and runs its examples.
+- `skill/references/verification-tools.md` — which check answers which question, the refute-first loop, verdict rules, pitfalls and runnable examples.
+- `SKILL.md`: routing rows for mathematical claims, a "refute first, then prove" Phase 5 with the verdict contract, frontmatter description now names the mathematics scope.
+
 - `ETHICS-AND-USAGE.md` — comprehensive ethics and usage guidelines covering disclosure requirements, authorship rules, verification responsibilities, peer-review confidentiality, framework-specific risks, a current (2026) summary of major publisher policies (Nature, Science, APS, Elsevier, Springer, Wiley, Taylor & Francis, SAGE, IEEE, ACM, arXiv, ICMJE, PLOS), sample disclosure statements at three levels (minimal / moderate / heavy), educational-use guidance, a pre-submission checklist, and references to primary policy sources.
 - README section linking to ethics document and summarising key points.
 

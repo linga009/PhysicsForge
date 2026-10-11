@@ -3,11 +3,14 @@ name: physicsforge
 description: >
   Ultra-level physics and mathematics research engine. Finds gaps in established theories,
   derives new formulae and frameworks from first principles, critically audits uploaded
-  research papers, verifies derivations symbolically via code, and produces compilable
+  research papers, checks mathematical and physical claims with executable tools (number
+  theory, group theory, algebra, analysis, inequalities, probability, Lie algebras, quantum
+  information, GR, QFT, vector calculus), and produces compilable
   LaTeX manuscripts. Use whenever the user asks to find gaps in any theory, derive new
   equations, write or continue a research paper, generate a LaTeX manuscript, produce a
   PRL or JHEP article, analyze or audit an uploaded paper, find errors in a derivation,
-  verify a proof, extend existing work, explore unsolved problems
+  verify or disprove a proof, identity, inequality or group-theory or number-theory
+  statement, extend existing work, explore unsolved problems
   in quantum gravity, QFT, GR, cosmology, condensed matter, thermodynamics, string theory,
   quantum information, PDE theory, or geometric analysis, connect two theories, or think
   like a Nobel-level physicist or mathematician. Triggers include "write a paper on",
@@ -29,7 +32,7 @@ Verifies symbolically. Produces full LaTeX manuscripts. Refuses to fake proofs.
 | Write a research paper / LaTeX manuscript | `output-rules.md` + `latex-engine.md` |
 | Continue a paper from a prior turn | `output-rules.md` + `latex-engine.md` |
 | Analyze, audit, or critique an uploaded paper | `paper-analysis.md` + `output-rules.md` |
-| Verify or check a derivation | `verification.md` |
+| Verify, check or try to disprove a derivation, identity, inequality, group or number-theory statement, calculation | `verification-tools.md` (runnable `pfv` checks), then `verification.md` for sympy patterns |
 | Find the gap / derive new physics | `output-rules.md` + `methods.md` + (`domains.md` if domain unclear) |
 | Pick the right derivation method (scaling, Noether, perturbation, topology, …) | `methods.md` |
 | Show me an example of [X] | `examples.md` |
@@ -194,17 +197,31 @@ inline as part of your response:
 If ANY check fails, do NOT present the result as final. Either fix it or downgrade
 the claim classification (Theorem → Proposition → Conjecture) and explain why.
 
-### PHASE 5 — SYMBOLIC VERIFICATION (when code execution is available)
+### PHASE 5 — VERIFY BY TRYING TO DISPROVE (when code execution is available)
 
-After any non-trivial derivation, verify it computationally. Read `verification.md`
-for code patterns. Minimum verification suite:
+After any non-trivial derivation or claimed result, try to **refute it first, then prove it**,
+with the executable toolkit in `scripts/pfv` (menu and rules: `verification-tools.md`).
+It covers mathematics and physics: number theory, groups, algebra, analysis, inequalities,
+probability, Lie algebras and anomalies, quantum information, GR and gauge theory, QFT
+algebra, mechanics and thermodynamics, vector calculus, dimensions, derivation chains.
 
-- Dimensional analysis (sympy units module or manual)
-- Limiting cases (substitute and simplify)
-- Algebraic identities (sympy.simplify, sympy.expand, sympy.trigsimp)
-- Sign conventions (numerical evaluation at test points)
+```python
+import sys; sys.path.insert(0, "<skill dir>/scripts")
+from pfv import numtheory, groups, algebra, smt   # any domain
+from pfv.core import report                        # prints the block below
+```
 
-Report verification results inline:
+Rules:
+
+- Every check returns one of four verdicts: REFUTED (exact witness, decisive), VERIFIED
+  (exact or exhaustive), CONSISTENT (passed a sample or tolerance, not a proof), INCONCLUSIVE.
+- Never write "Theorem" on a CONSISTENT result; label it Observation or `[NUMERICAL]`.
+  Say INCONCLUSIVE when the tool could not decide. Never hide a REFUTED.
+- Minimum suite for a derivation: dimensions, limiting cases, one refutation hunt for each
+  universal claim, and an exact check of each identity used. If code cannot run, say so.
+- Paste the `report(...)` output verbatim, including its "Not proven:" line.
+
+Report format:
 
 ```
 ═══════════ SYMBOLIC VERIFICATION ═══════════
@@ -247,7 +264,7 @@ Use these inline tags consistently:
 | "Write a paper on [topic]" | Full LaTeX manuscript — read `latex-engine.md` |
 | "Analyze / audit / critique this paper" | Full audit — read `paper-analysis.md` |
 | "Find errors in [derivation]" | Line-by-line audit with verification |
-| "Verify this [equation/proof]" | Symbolic verification — read `verification.md` |
+| "Verify / check / disprove this [equation, proof, group or number-theory claim]" | Refute first, then prove with `pfv`; read `verification-tools.md` |
 | "Extend this work" | Use `paper-analysis.md` then derivation engine |
 | "continue paper" | Resume LaTeX from last section boundary |
 | "Solve [Millennium problem]" | Trigger Millennium protocol; do not claim proof |
@@ -259,7 +276,8 @@ Use these inline tags consistently:
 - **`references/output-rules.md`** — Anti-truncation rules. Read for any paper output.
 - **`references/latex-engine.md`** — Full LaTeX paper generation engine.
 - **`references/paper-analysis.md`** — Workflow for auditing uploaded papers.
-- **`references/verification.md`** — Symbolic verification patterns (sympy + numerical).
+- **`references/verification-tools.md`** — The `scripts/pfv` toolkit: 16 domains, which check answers which question, verdict rules, pitfalls, runnable examples.
+- **`references/verification.md`** — Symbolic verification patterns (sympy + numerical), the fallback when `pfv` has no check for the question.
 - **`references/methods.md`** — Methodological toolkit: scaling, conservation, Noether, variational, perturbation, causality/analyticity, group theory, topology, and how to chain them.
 - **`references/examples.md`** — Worked examples: PRL section, paper critique, verification trace.
 - **`references/domains.md`** — Domain-specific guidance: physics + math physics + PDE + geometric analysis.
