@@ -7,6 +7,7 @@
 *Finds gaps in established theories. Derives new formulae from first principles. Audits research papers line-by-line. Verifies derivations symbolically. Produces compilable LaTeX manuscripts. Refuses to fake proofs.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Claude Code Plugin](https://img.shields.io/badge/format-Claude%20Code%20Plugin-D97757.svg)](#as-a-claude-code-plugin)
 [![Skill Format](https://img.shields.io/badge/format-Anthropic%20Skill-blue.svg)](#installation)
 [![Gemini Gem](https://img.shields.io/badge/format-Gemini%20Gem-4285F4.svg)](#gemini-gem-installation)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
@@ -22,6 +23,7 @@
 - [Why it exists](#why-it-exists)
 - [Features](#features)
 - [Installation](#installation)
+  - [As a Claude Code Plugin](#as-a-claude-code-plugin)
   - [As a Claude / Anthropic Skill](#as-a-claude--anthropic-skill)
   - [As a Gemini Gem](#as-a-gemini-gem)
   - [Generic LLM (ChatGPT, Mistral, local models, etc.)](#generic-llm-chatgpt-mistral-local-models-etc)
@@ -49,10 +51,11 @@
 
 ## What is PhysicsForge?
 
-PhysicsForge is a **structured prompting framework** that turns a general-purpose large language model into a frontier-level physics and mathematics research assistant. It is delivered as either:
+PhysicsForge is a **structured prompting framework**, backed by real test-verified tools, that turns a general-purpose large language model into a frontier-level physics and mathematics research assistant. It is delivered as:
 
-1. A **multi-file skill** in the [Anthropic Skill format](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) (a `SKILL.md` dispatcher plus six modular reference files in a `references/` folder), or
-2. A **single-file Gemini Gem instruction set** containing the same content compiled for Google Gemini's single-prompt environment.
+1. A **Claude Code plugin** — the skill plus slash commands (`/audit`, `/gap-analysis`, `/verify`, `/citation-check`, `/derivation-check`, `/quantum-check`, `/preregister`) that invoke real, test-backed Python/shell tools instead of relying on the model's self-report.
+2. A **multi-file skill** in the [Anthropic Skill format](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) (a `SKILL.md` dispatcher plus a `references/` folder, usable standalone outside the plugin).
+3. A **single-file Gemini Gem instruction set** containing the same content compiled for Google Gemini's single-prompt environment.
 
 Once installed, the model behaves as a research engine that:
 
@@ -85,6 +88,8 @@ The result is a model that can give you **actual partial advances**, **honest cr
 | **Derivation engine** | A 12-step schema: axioms → constraints → toolkit → step-by-step working → boxed result → physical interpretation → dimensional analysis → limiting cases → predictions → falsifiability → open threads → claim classification. |
 | **Paper auditing** | Eight-step workflow: intake → claim extraction → dependency graph → derivation audit → hidden assumption hunt → consistency checks → novelty assessment → remaining gap statement → proposed extension. |
 | **Symbolic verification** | Seven `sympy` patterns covering dimensional analysis, limiting cases, algebraic identities, sign conventions, integral / operator identities, tensor contractions, and known-formula recovery. |
+| **Executable verification (`pfv`)** | About 140 checks in 16 domains (number theory, groups, Lie algebras and anomalies, quantum information, linear and polynomial algebra, analysis, z3 inequalities and integer constraints, probability, combinatorics, GR and gauge theory, mechanics, vector calculus, QFT algebra, dimensions, derivation chains). Refute first, then prove; four honest verdicts; floats are never snapped to nearby rationals. `/verify` runs the loop. |
+| **Executable verification toolkit (`pfv`)** | Tested Python checks for mathematics *and* physics: number theory, group theory, polynomial and linear algebra, analysis, inequalities (z3), probability, combinatorics, Lie algebras and anomalies, quantum information, GR and gauge theory, QFT gamma-matrix algebra, mechanics and thermodynamics, vector calculus, dimensional analysis, derivation chains. Four verdicts (REFUTED / VERIFIED / CONSISTENT / INCONCLUSIVE), refute-first workflow, planted-error test suite. See [`verification-tools.md`](./skill/references/verification-tools.md). |
 | **LaTeX manuscript engine** | Full document templates for `article`, `revtex4-2` (PRL), and `jheppub` classes with custom physics macros, theorem environments, Feynman diagrams (`tikz-feynman`), and BibTeX standards. |
 | **Domain modules** | Eleven domain-specific cheat sheets: QFT, GR, quantum gravity, Standard Model, QM foundations, thermodynamics, cosmology, condensed matter, PDE & harmonic analysis, geometric analysis, stochastic analysis & SPDE, plus a 15-row cross-domain bridge table. |
 | **Worked examples** | Three calibration targets: a finished PRL-style "Identifying the Gap" section, a paper-critique audit, a six-angle symbolic verification trace. |
@@ -93,22 +98,42 @@ The result is a model that can give you **actual partial advances**, **honest cr
 
 ## Installation
 
+### As a Claude Code Plugin
+
+The recommended way to use PhysicsForge with [Claude Code](https://claude.com/claude-code). This gives you the skill (auto-invoked based on your request) *and* seven slash commands backed by real, test-covered verification scripts in `scripts/` — not just prose protocols.
+
+**Option A — via this repo's own marketplace:**
+
+```
+/plugin marketplace add linga009/PhysicsForge
+/plugin install physicsforge@physicsforge-marketplace
+```
+
+**Option B — direct, no marketplace (no auto-update):**
+
+```bash
+git clone https://github.com/linga009/PhysicsForge.git
+claude --plugin-dir ./PhysicsForge
+```
+
+Once installed, `/audit`, `/gap-analysis`, `/verify`, `/citation-check`, `/derivation-check`, `/quantum-check`, and `/preregister` are available as slash commands, and the `physicsforge` skill auto-activates on relevant requests. The scripts need Python packages: `pip install -r scripts/requirements.txt` (sympy, numpy, scipy, z3-solver, citeguard-cli, einsteinpy). See [Reference modules](#reference-modules) for what backs each command, and `scripts/STATUS.md` for what's genuinely automated versus still a judgment call.
+
 ### As a Claude / Anthropic Skill
 
-If you're using Claude with the Skills feature enabled (e.g. the Claude desktop app with code execution or a Claude API integration that supports skills):
+If you just want the skill without the plugin's slash commands (e.g. you're using Claude with the Skills feature enabled outside Claude Code):
 
 ```bash
 # Clone the repo
-git clone https://github.com/<your-username>/physicsforge.git
+git clone https://github.com/linga009/PhysicsForge.git
 
 # Move the skill folder to your skills directory
 # (The exact path depends on your client; common locations:)
 #   - Claude Desktop:  ~/.claude/skills/
 #   - Custom mount:    /mnt/skills/user/
-mv physicsforge/skill ~/.claude/skills/physicsforge
+mv PhysicsForge/skills/physicsforge ~/.claude/skills/physicsforge
 ```
 
-The `SKILL.md` dispatcher will be picked up automatically, and the model will load the relevant `references/*.md` file on demand based on the request type.
+The `SKILL.md` dispatcher will be picked up automatically, and the model will load the relevant `references/*.md` file on demand based on the request type. Note that this path does not get the slash commands or the real backing scripts in `scripts/` — the skill's prose will reference them, but you'll need to copy `scripts/` alongside and run them manually.
 
 ### As a Gemini Gem
 
@@ -118,7 +143,7 @@ For Google Gemini users:
 2. **Name:** `PhysicsForge`
 3. **Description:** *Frontier physics & math research engine. Finds gaps, derives formulae, audits papers, refuses to fake proofs.*
 4. Open [`gemini-gem/instructions.md`](./gemini-gem/instructions.md), copy everything between the `===== BEGIN GEM INSTRUCTIONS =====` and `===== END GEM INSTRUCTIONS =====` markers, and paste it into the Gem's **Instructions** field.
-5. *(Optional)* Upload the six files from [`skill/references/`](./skill/references/) into the Gem's **Knowledge** section to give it deep on-demand reference. The Gem will fall back gracefully on the inlined rules if you skip this step.
+5. *(Optional)* Upload the files from [`skills/physicsforge/references/`](./skills/physicsforge/references/) into the Gem's **Knowledge** section to give it deep on-demand reference. The Gem will fall back gracefully on the inlined rules if you skip this step.
 6. **Save**, then run the smoke-test prompts at the bottom of `instructions.md` to confirm correct behavior.
 
 ### Generic LLM (ChatGPT, Mistral, local models, etc.)
@@ -126,28 +151,49 @@ For Google Gemini users:
 For any system that accepts a system prompt:
 
 - **System-prompt-only environments**: paste the contents of [`gemini-gem/instructions.md`](./gemini-gem/instructions.md) (between the markers) into the system prompt field. It is self-contained.
-- **File-aware environments** (Custom GPTs with knowledge files, Claude Projects, etc.): use the [`skill/`](./skill/) folder structure — paste `SKILL.md` as the system prompt and upload the six files from `references/` as knowledge.
+- **File-aware environments** (Custom GPTs with knowledge files, Claude Projects, etc.): use the [`skills/physicsforge/`](./skills/physicsforge/) folder structure — paste `SKILL.md` as the system prompt and upload the files from `references/` as knowledge.
 
 ## Repository structure
 
 ```
-physicsforge/
+PhysicsForge/
 ├── README.md                          ← this file
 ├── LICENSE                            ← MIT
 ├── CONTRIBUTING.md                    ← contribution guide
 ├── CHANGELOG.md                       ← version history
 ├── .gitignore
 │
-├── skill/                             ← Anthropic Skill format
+├── .claude-plugin/
+│   ├── plugin.json                    ← Claude Code plugin manifest
+│   └── marketplace.json               ← self-hosted marketplace listing
+│
+├── commands/                          ← Claude Code slash commands
+│   ├── audit.md                       ← /audit
+│   ├── gap-analysis.md                ← /gap-analysis
+│   ├── citation-check.md              ← /citation-check
+│   ├── derivation-check.md            ← /derivation-check
+│   ├── quantum-check.md               ← /quantum-check
+│   ├── verify.md                      ← /verify (refute first, then prove)
+│   └── preregister.md                 ← /preregister
+│
+├── scripts/                           ← real, test-backed verification tools
+│   ├── pfv/                           ← verification toolkit: 16 domains, ~140 checks,
+│   │                                     four honest verdicts (python -m pfv list)
+│   ├── tests/                         ← pfv planted-error + regression suite
+│   │                                     (python -m pfv selftest, 109 tests)
+│   ├── citation_guard.py              ← DOI/arXiv/retraction verification
+│   ├── prereg.sh                      ← git-ancestry pre-registration proof
+│   ├── deriv_check.py                 ← kept only as the frozen pre-registration's instrument
+│   ├── test_*.py                      ← regression suites for the scripts above
+│   ├── requirements.txt               ← pip install -r scripts/requirements.txt
+│   └── STATUS.md                      ← what's genuinely automated vs. a judgment call
+│
+├── skills/physicsforge/               ← Anthropic Skill format (also the
+│   │                                     plugin's skill component)
 │   ├── SKILL.md                       ← dispatcher (identity, claim hierarchy,
-│   │                                     Millennium protocol, methodology, routing)
-│   └── references/                    ← loaded on-demand by SKILL.md
-│       ├── output-rules.md            ← anti-truncation rules, word counts
-│       ├── latex-engine.md            ← full LaTeX manuscript engine
-│       ├── paper-analysis.md          ← 8-step audit workflow
-│       ├── verification.md            ← 7 sympy verification patterns
-│       ├── examples.md                ← 3 worked calibration examples
-│       └── domains.md                 ← 11 domain-specific cheat sheets
+│   │                                     Millennium protocol, 8-phase methodology, routing)
+│   └── references/                    ← loaded on-demand by SKILL.md —
+│                                         see Reference modules below
 │
 ├── gemini-gem/                        ← Gemini Gem format
 │   └── instructions.md                ← single-file consolidated version
@@ -156,11 +202,12 @@ physicsforge/
 │                                        criteria, pushback resistance,
 │                                        forbidden-phrase list, smoke tests)
 │
+├── preregistrations/                  ← example pre-registration (frozen prediction)
+├── results/                           ← its corresponding result
+│
 └── .github/
-    ├── ISSUE_TEMPLATE/
-    │   ├── bug_report.md
-    │   └── feature_request.md
-    └── PULL_REQUEST_TEMPLATE.md
+    └── workflows/
+        └── tools-ci.yml               ← runs scripts/test_*.py and prereg audit on every push
 ```
 
 ## Core concepts
@@ -239,15 +286,22 @@ Used inline throughout responses:
 
 ## Reference modules
 
+The skill has grown to 25 reference modules; the table below covers the original
+core set. For the complete, current list (discovery, gap analysis, citation
+guard, deep search, scholar eval, adversarial review, dialogue health, the
+theoretician's-reasoning modules, etc.) see `SKILL.md`'s own **REFERENCE FILES**
+section, which is the authoritative, maintained index, or `CHANGELOG.md` for
+when each was added.
+
 | File | Purpose | Approx. lines |
 |---|---|---|
-| [`SKILL.md`](./skill/SKILL.md) | Dispatcher: identity, claim hierarchy, Millennium protocol, 5-phase research methodology, routing table to other modules. | 259 |
-| [`output-rules.md`](./skill/references/output-rules.md) | Anti-truncation: 10 hard rules, word-count minimums per paper section, forbidden placeholder list, paper generation sequence. | 114 |
-| [`latex-engine.md`](./skill/references/latex-engine.md) | Document classes, full preamble (with `tikz-feynman`, `cleveref`, `physics`, custom theorem environments and physics macros), all 14 paper sections with templates, equation environments, table standard, Feynman diagram standard, BibTeX standard, paper length calibration, compilation instructions. | 478 |
-| [`paper-analysis.md`](./skill/references/paper-analysis.md) | Eight-step audit workflow (intake → claim extraction → dependency graph → derivation audit → hidden assumption hunt → consistency checks → novelty assessment → remaining gap → extension), audit output formats, anti-patterns. | 264 |
-| [`verification.md`](./skill/references/verification.md) | Seven `sympy` verification patterns: dimensional analysis (manual + units module), limiting cases, algebraic identities, sign / convention checks, integral and operator identities, tensor / index contractions, known-formula recovery. Failure interpretation, sympy limits. | 365 |
-| [`examples.md`](./skill/references/examples.md) | Three worked examples: a finished PRL "Identifying the Gap" section on the cosmological constant problem, a paper critique of a fake RH proof, a six-angle symbolic verification of $E^2 = (pc)^2 + (mc^2)^2$. | 246 |
-| [`domains.md`](./skill/references/domains.md) | Eleven domain modules: fundamental physics (QFT/GR/QG/SM), QM & quantum information, thermodynamics & statistical mechanics, cosmology & astrophysics, condensed matter, PDE & harmonic analysis, geometric analysis, stochastic analysis & SPDE, numerical methods, mathematical physics toolkit, cross-domain bridges. | 391 |
+| [`SKILL.md`](./skills/physicsforge/SKILL.md) | Dispatcher: identity, claim hierarchy, Millennium protocol, 8-phase research methodology, routing table to all 25 reference modules, real-tools wiring. | 608 |
+| [`output-rules.md`](./skills/physicsforge/references/output-rules.md) | Anti-truncation: 10 hard rules, word-count minimums per paper section, forbidden placeholder list, paper generation sequence. | 114 |
+| [`latex-engine.md`](./skills/physicsforge/references/latex-engine.md) | Document classes, full preamble (with `tikz-feynman`, `cleveref`, `physics`, custom theorem environments and physics macros), all 14 paper sections with templates, equation environments, table standard, Feynman diagram standard, BibTeX standard, paper length calibration, compilation instructions. | 478 |
+| [`paper-analysis.md`](./skills/physicsforge/references/paper-analysis.md) | Eight-step audit workflow (intake → claim extraction → dependency graph → derivation audit → hidden assumption hunt → consistency checks → novelty assessment → remaining gap → extension), audit output formats, anti-patterns. | 269 |
+| [`verification.md`](./skills/physicsforge/references/verification.md) | Seven `sympy` verification patterns, plus a pointer to the real, test-backed `scripts/` tools (and the bugs caught while building them) to use instead of ad-hoc snippets where they cover the same ground. | 402 |
+| [`examples.md`](./skills/physicsforge/references/examples.md) | Three worked examples: a finished PRL "Identifying the Gap" section on the cosmological constant problem, a paper critique of a fake RH proof, a six-angle symbolic verification of $E^2 = (pc)^2 + (mc^2)^2$. | 246 |
+| [`domains.md`](./skills/physicsforge/references/domains.md) | Eleven domain modules: fundamental physics (QFT/GR/QG/SM), QM & quantum information, thermodynamics & statistical mechanics, cosmology & astrophysics, condensed matter, PDE & harmonic analysis, geometric analysis, stochastic analysis & SPDE, numerical methods, mathematical physics toolkit, cross-domain bridges. | 391 |
 
 ## Activation commands
 
@@ -271,7 +325,7 @@ The model recognises these phrases and routes to the appropriate workflow:
 
 ## Worked example
 
-A condensed version of [Example 2](./skill/references/examples.md) — auditing a paper that claims to prove the Riemann Hypothesis via an operator construction:
+A condensed version of [Example 2](./skills/physicsforge/references/examples.md) — auditing a paper that claims to prove the Riemann Hypothesis via an operator construction:
 
 ```
 CLAIM INVENTORY
@@ -302,7 +356,7 @@ The construction is interesting but does NOT prove RH:
 Status of RH: Open. This paper does not advance it.
 ```
 
-The full example, including the dependency graph and Pauli Protocol output, lives in [`skill/references/examples.md`](./skill/references/examples.md).
+The full example, including the dependency graph and Pauli Protocol output, lives in [`skill/references/examples.md`](./skills/physicsforge/references/examples.md).
 
 ## Use cases
 
@@ -326,7 +380,8 @@ It is **not** built for:
 PhysicsForge is a **structured prompting framework**, not an oracle. Specific limitations:
 
 - **The model is still an LLM.** It can hallucinate citations, get algebra wrong, and miss obvious errors. The framework reduces these failures but does not eliminate them. **Always verify critical claims independently.**
-- **Symbolic verification has a finite reach.** `sympy` cannot verify functional analysis estimates, weak-solution existence, convergence of approximation schemes, topological claims, compactness arguments, or spectral gaps. The framework explicitly flags this in [`verification.md`](./skill/references/verification.md).
+- **The `pfv` checks verify statements, not models.** A VERIFIED result means the statement you typed is true; it does not say it is the statement you meant or that the physics is right. The toolkit's regression suite uses planted errors written by the toolkit's author, so it shows the checks catch those errors, not that they catch every error, and it does not by itself show that answers improve. Several checks (z3 integer reasoning, Monte Carlo, floating-point matrices) can only return CONSISTENT or INCONCLUSIVE.
+- **Symbolic verification has a finite reach.** `sympy` cannot verify functional analysis estimates, weak-solution existence, convergence of approximation schemes, topological claims, compactness arguments, or spectral gaps. The framework explicitly flags this in [`verification.md`](./skills/physicsforge/references/verification.md).
 - **Web search is not always available.** When literature reconnaissance is needed and the model cannot search, it works from training-data knowledge and flags claims with `[VERIFY]`. Recent papers will be missing.
 - **Code execution is not always available.** Without it, the model performs manual symbolic checks and marks unverified algebra with `[UNVERIFIED ALGEBRA]`.
 - **Length matters.** A full LaTeX manuscript with 25+ references can easily exceed an LLM's single-response budget. The framework includes a clean section-boundary continuation protocol, but you may need to iterate.
@@ -441,7 +496,7 @@ PhysicsForge owes intellectual debts to:
 - **The Clay Mathematics Institute**, whose precise problem statements provided the templates for the Millennium-Class Protocol.
 - **The arXiv** and **INSPIRE-HEP**, whose open infrastructure makes any of this possible.
 
-And, more practically: every researcher whose published work made the domain modules possible. Every reference in [`domains.md`](./skill/references/domains.md) points to people who have done the actual hard work that this framework merely organises.
+And, more practically: every researcher whose published work made the domain modules possible. Every reference in [`domains.md`](./skills/physicsforge/references/domains.md) points to people who have done the actual hard work that this framework merely organises.
 
 ---
 

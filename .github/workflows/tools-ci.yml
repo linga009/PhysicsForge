@@ -1,0 +1,112 @@
+name: tools-ci
+
+# Runs the real, tool-backed verifiers in scripts/ against their regression
+# suites on every push and PR -- this is the actual "eval suite wired into
+# CI as a regression gate" step from idea-to-production-tool's hardening
+# checklist. It does not touch the prompt-only PhysicsForge protocols
+# (Pauli reasoning, ScholarEval, adversarial review) -- see scripts/STATUS.md
+# for why those stay judgment calls rather than being hard-automated here.
+
+on:
+  push:
+    paths:
+      - "scripts/**"
+      - "skills/physicsforge/references/verification-tools.md"  # pfv's doc examples run as tests
+      - ".github/workflows/tools-ci.yml"
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "skills/physicsforge/references/verification-tools.md"
+      - ".github/workflows/tools-ci.yml"
+  workflow_dispatch: {}
+
+jobs:
+  pfv:
+    # The verification toolkit's planted-error and regression suite (~3 min). Windows is in the matrix
+    # because two real bugs were Windows-only (cp1252 console crash, SIGALRM timeouts silently off);
+    # the no-z3 leg proves the smt checks degrade to INCONCLUSIVE instead of failing or lying.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            z3: "z3-solver"
+          - os: windows-latest
+            z3: "z3-solver"
+          - os: ubuntu-latest
+            z3: ""
+    runs-on: ${{ matrix.os }}
+    name: pfv selftest (${{ matrix.os }}${{ matrix.z3 == '' && ', no z3' || '' }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install sympy numpy scipy ${{ matrix.z3 }}
+      - name: python -m pfv selftest
+        working-directory: scripts
+        run: python -m pfv selftest
+
+  test-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # prereg.sh's CHRONOLOGY check needs real commit ancestry, not a shallow clone
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: test_retry.py -- citation_guard.py retry/cache logic (deterministic, no network)
+        working-directory: scripts
+        run: python test_retry.py
+
+      - name: test_deriv_check.py -- the instrument named by the frozen pre-registration still behaves
+        working-directory: scripts
+        run: python test_deriv_check.py
+
+      - name: test_kerr_check.py -- Kerr separability derived from the real EinsteinPy metric (~25s)
+        working-directory: scripts
+        run: python test_kerr_check.py
+
+  citation-spot-check:
+    # Separate job: this one DOES hit the real network (Crossref, arXiv), so
+    # it's allowed to fail without blocking the deterministic suite above --
+    # a transient API outage shouldn't block an unrelated PR. Runs the actual
+    # golden set, not a mock, on a schedule + manual dispatch rather than
+    # every push, since it makes real external calls.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install citeguard-cli
+      - name: citation_guard.py against the real golden set (network required)
+        working-directory: scripts
+        run: python citation_guard.py check golden_citations.jsonl --fail-on retracted
+
+  prereg-audit:
+    # If any pre-registration exists under preregistrations/, prove from git
+    # history alone that it wasn't edited after freezing and that no result
+    # predates it. This is the CI-enforced half of Tool 0 -- a human can
+    # forget to run `prereg.sh audit` locally before claiming a confirmatory
+    # result; CI cannot.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: prereg.sh audit (skips cleanly if no preregistrations exist yet)
+        run: |
+          if ls preregistrations/*.md >/dev/null 2>&1; then
+            sh scripts/prereg.sh audit
+          else
+            echo "No pre-registrations under preregistrations/ yet -- nothing to audit."
+          fi

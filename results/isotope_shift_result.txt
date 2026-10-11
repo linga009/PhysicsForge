@@ -1,0 +1,4 @@
+Exact symbolic: -1 + 400*sqrt(39010065)/2600671
+Numeric shift: -3.9355%
+Sign matches prediction (decrease): True
+Magnitude in [3.5%,4.5%]: True

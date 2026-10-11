@@ -26,6 +26,11 @@ Before doing anything else:
 2. **If Millennium-class**: invoke the MILLENNIUM-CLASS PROBLEM PROTOCOL from `SKILL.md`
    immediately. Open with the mandatory honesty preamble. Do not skip this.
 
+2a. **If the paper claims to overturn an established theory or solve a famous problem**:
+   run the scan in `breakthrough-red-flags.md` here, before forming any technical
+   opinion. It calibrates how much scrutiny the rest of this workflow should apply —
+   it does not replace reading the paper.
+
 3. **Read the entire paper once** before forming opinions. Take note of:
    - Main theorems / propositions / conjectures
    - The "single key hypothesis" if any (often hidden in a remark)
