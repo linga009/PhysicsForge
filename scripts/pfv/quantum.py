@@ -215,6 +215,32 @@ def check_entangled(rho, dims=(2, 2), tol: float = 1e-10) -> Result:
     return inconclusive("check_entangled", claim, f"PPT (min eig {mn:.2e}) but dims {dims}: could be separable or bound entangled")
 
 
+def check_entanglement_entropy(state, dims: Sequence[int], keep: Sequence[int], claimed_bits: float, tol: float = 1e-9) -> Result:
+    """Von Neumann entropy (bits) of the reduced state on the subsystems in `keep`, against a claimed value.
+
+    `state` is a ket or a density matrix on the tensor product with local dimensions `dims`. For a pure global state
+    this IS the entanglement entropy (0 for a product state, log2 d for a maximally entangled one); for a mixed global
+    state it is only the entropy of the marginal, not an entanglement measure, and the result says so."""
+    arr = np.asarray(state, dtype=complex)
+    rho = dm(arr) if arr.ndim == 1 or 1 in arr.shape else arr
+    keep = list(keep)
+    claim = f"S(rho_{keep}) = {claimed_bits} bits"
+    if rho.shape[0] != int(np.prod(dims)):
+        return inconclusive("check_entanglement_entropy", claim, f"state dimension {rho.shape[0]} != prod(dims) = {int(np.prod(dims))}")
+    valid = check_density_matrix(rho, tol=1e-8)
+    if not valid.verified:
+        return inconclusive("check_entanglement_entropy", claim, f"input is not a valid state: {valid.detail}")
+    S = von_neumann_entropy(ptrace(rho, dims, keep), base=2.0)
+    pure = abs(valid.data["purity"] - 1) < 1e-8
+    caveat = "" if pure else "global state is mixed: this is the entropy of the marginal, NOT an entanglement measure"
+    gap = abs(S - float(claimed_bits))
+    if gap > tol:
+        return refuted("check_entanglement_entropy", claim, {"computed_bits": S}, detail=f"|S - claimed| = {gap:.3e}")
+    res = verified("check_entanglement_entropy", claim, f"S = {S:.12f} bits (eigenvalues of the reduced state, LAPACK), |S - claimed| = {gap:.1e}")
+    res.caveat = caveat
+    return res
+
+
 # --------------------------------------------------------------------------
 # channels
 # --------------------------------------------------------------------------

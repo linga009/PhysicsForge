@@ -11,14 +11,43 @@ on:
   push:
     paths:
       - "scripts/**"
+      - "skills/physicsforge/references/verification-tools.md"  # pfv's doc examples run as tests
       - ".github/workflows/tools-ci.yml"
   pull_request:
     paths:
       - "scripts/**"
+      - "skills/physicsforge/references/verification-tools.md"
       - ".github/workflows/tools-ci.yml"
   workflow_dispatch: {}
 
 jobs:
+  pfv:
+    # The verification toolkit's planted-error and regression suite (~3 min). Windows is in the matrix
+    # because two real bugs were Windows-only (cp1252 console crash, SIGALRM timeouts silently off);
+    # the no-z3 leg proves the smt checks degrade to INCONCLUSIVE instead of failing or lying.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            z3: "z3-solver"
+          - os: windows-latest
+            z3: "z3-solver"
+          - os: ubuntu-latest
+            z3: ""
+    runs-on: ${{ matrix.os }}
+    name: pfv selftest (${{ matrix.os }}${{ matrix.z3 == '' && ', no z3' || '' }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install sympy numpy scipy ${{ matrix.z3 }}
+      - name: python -m pfv selftest
+        working-directory: scripts
+        run: python -m pfv selftest
+
   test-tools:
     runs-on: ubuntu-latest
     steps:
@@ -31,20 +60,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python dependencies
-        run: |
-          pip install sympy qutip citeguard-cli einsteinpy
+        run: pip install -r scripts/requirements.txt
 
       - name: test_retry.py -- citation_guard.py retry/cache logic (deterministic, no network)
         working-directory: scripts
         run: python test_retry.py
 
-      - name: test_deriv_check.py -- real claims from this project's manuscripts
+      - name: test_deriv_check.py -- the instrument named by the frozen pre-registration still behaves
         working-directory: scripts
         run: python test_deriv_check.py
-
-      - name: test_quantum_check.py -- QuTiP calibration against canonical QM/QI facts
-        working-directory: scripts
-        run: python test_quantum_check.py
 
       - name: test_kerr_check.py -- Kerr separability derived from the real EinsteinPy metric (~25s)
         working-directory: scripts

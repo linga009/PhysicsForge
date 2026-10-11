@@ -13,7 +13,7 @@ from typing import Callable, Iterable, Sequence
 import numpy as np
 import sympy as sp
 
-from .core import Result, verified, consistent, inconclusive
+from .core import Result, verified, consistent, inconclusive, claimed_value_result
 from .core import refuted as _refuted
 from functools import partial as _partial
 
@@ -32,14 +32,14 @@ def enumerate_probability(outcomes: Iterable, event: Callable, weight: Callable 
 
 
 def check_probability(outcomes: Iterable, event: Callable, claimed, weight: Callable | None = None, claim: str = "") -> Result:
-    """Exact P(event) by exhaustive enumeration of a finite outcome space (VERIFIED/REFUTED are decisive). `claimed` is read as an exact rational: pass '1/6' or a Fraction; a decimal such as 0.167 is read as 167/1000, so it will be REFUTED for 1/6."""
+    """Exact P(event) by exhaustive enumeration of a finite outcome space. `claimed` may be '1/6', a Fraction or an int
+    (VERIFIED/REFUTED are decisive), or a float: a float within 1e-9 of the exact value is CONSISTENT (it is an
+    approximation, not the exact value), one further away is REFUTED (0.167 is REFUTED for 1/6)."""
     outcomes = list(outcomes)
     p = enumerate_probability(outcomes, event, weight)
-    c = Fraction(str(sp.nsimplify(claimed))) if not isinstance(claimed, Fraction) else claimed
-    claim = claim or f"P(event) = {c}"
-    if p == c:
-        return verified("check_probability", claim, f"exhaustive enumeration of {len(outcomes)} outcomes", exact=str(p))
-    return refuted("check_probability", claim, {"exact_probability": str(p), "as_float": float(p)}, detail=f"enumerated {len(outcomes)} outcomes")
+    claim = claim or f"P(event) = {claimed}"
+    return claimed_value_result("check_probability", claim, sp.Rational(p.numerator, p.denominator), claimed,
+                                f"exhaustive enumeration of {len(outcomes)} outcomes", exact=str(p), as_float=float(p))
 
 
 def check_conditional(outcomes: Iterable, event: Callable, given: Callable, claimed, weight: Callable | None = None) -> Result:
@@ -49,11 +49,9 @@ def check_conditional(outcomes: Iterable, event: Callable, given: Callable, clai
     if not sub:
         return inconclusive("check_conditional", "P(A|B)", "the conditioning event has probability 0")
     p = enumerate_probability(sub, event, weight)
-    c = Fraction(str(sp.nsimplify(claimed)))
-    claim = f"P(A | B) = {c}"
-    if p == c:
-        return verified("check_conditional", claim, f"enumerated {len(sub)} of {len(outcomes)} outcomes satisfying B", exact=str(p))
-    return refuted("check_conditional", claim, {"exact_conditional_probability": str(p), "as_float": float(p)})
+    claim = f"P(A | B) = {claimed}"
+    return claimed_value_result("check_conditional", claim, sp.Rational(p.numerator, p.denominator), claimed,
+                                f"enumerated {len(sub)} of {len(outcomes)} outcomes satisfying B", exact=str(p), as_float=float(p))
 
 
 def check_expectation(outcomes: Iterable, value: Callable, claimed, weight: Callable | None = None) -> Result:
@@ -64,11 +62,9 @@ def check_expectation(outcomes: Iterable, value: Callable, claimed, weight: Call
         w = Fraction(1) if weight is None else Fraction(weight(o))
         tot += w; acc += w * Fraction(value(o))
     e = acc / tot
-    c = Fraction(str(sp.nsimplify(claimed)))
-    claim = f"E[X] = {c}"
-    if e == c:
-        return verified("check_expectation", claim, f"exhaustive over {len(outcomes)} outcomes", exact=str(e))
-    return refuted("check_expectation", claim, {"exact_expectation": str(e), "as_float": float(e)})
+    claim = f"E[X] = {claimed}"
+    return claimed_value_result("check_expectation", claim, sp.Rational(e.numerator, e.denominator), claimed,
+                                f"exhaustive over {len(outcomes)} outcomes", exact=str(e), as_float=float(e))
 
 
 def check_pdf(pdf, var, lo, hi, mean=None, variance=None) -> Result:

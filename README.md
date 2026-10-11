@@ -53,7 +53,7 @@
 
 PhysicsForge is a **structured prompting framework**, backed by real test-verified tools, that turns a general-purpose large language model into a frontier-level physics and mathematics research assistant. It is delivered as:
 
-1. A **Claude Code plugin** — the skill plus slash commands (`/audit`, `/gap-analysis`, `/citation-check`, `/derivation-check`, `/quantum-check`, `/preregister`) that invoke real, test-backed Python/shell tools instead of relying on the model's self-report.
+1. A **Claude Code plugin** — the skill plus slash commands (`/audit`, `/gap-analysis`, `/verify`, `/citation-check`, `/derivation-check`, `/quantum-check`, `/preregister`) that invoke real, test-backed Python/shell tools instead of relying on the model's self-report.
 2. A **multi-file skill** in the [Anthropic Skill format](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) (a `SKILL.md` dispatcher plus a `references/` folder, usable standalone outside the plugin).
 3. A **single-file Gemini Gem instruction set** containing the same content compiled for Google Gemini's single-prompt environment.
 
@@ -88,6 +88,8 @@ The result is a model that can give you **actual partial advances**, **honest cr
 | **Derivation engine** | A 12-step schema: axioms → constraints → toolkit → step-by-step working → boxed result → physical interpretation → dimensional analysis → limiting cases → predictions → falsifiability → open threads → claim classification. |
 | **Paper auditing** | Eight-step workflow: intake → claim extraction → dependency graph → derivation audit → hidden assumption hunt → consistency checks → novelty assessment → remaining gap statement → proposed extension. |
 | **Symbolic verification** | Seven `sympy` patterns covering dimensional analysis, limiting cases, algebraic identities, sign conventions, integral / operator identities, tensor contractions, and known-formula recovery. |
+| **Executable verification (`pfv`)** | About 140 checks in 16 domains (number theory, groups, Lie algebras and anomalies, quantum information, linear and polynomial algebra, analysis, z3 inequalities and integer constraints, probability, combinatorics, GR and gauge theory, mechanics, vector calculus, QFT algebra, dimensions, derivation chains). Refute first, then prove; four honest verdicts; floats are never snapped to nearby rationals. `/verify` runs the loop. |
+| **Executable verification toolkit (`pfv`)** | Tested Python checks for mathematics *and* physics: number theory, group theory, polynomial and linear algebra, analysis, inequalities (z3), probability, combinatorics, Lie algebras and anomalies, quantum information, GR and gauge theory, QFT gamma-matrix algebra, mechanics and thermodynamics, vector calculus, dimensional analysis, derivation chains. Four verdicts (REFUTED / VERIFIED / CONSISTENT / INCONCLUSIVE), refute-first workflow, planted-error test suite. See [`verification-tools.md`](./skill/references/verification-tools.md). |
 | **LaTeX manuscript engine** | Full document templates for `article`, `revtex4-2` (PRL), and `jheppub` classes with custom physics macros, theorem environments, Feynman diagrams (`tikz-feynman`), and BibTeX standards. |
 | **Domain modules** | Eleven domain-specific cheat sheets: QFT, GR, quantum gravity, Standard Model, QM foundations, thermodynamics, cosmology, condensed matter, PDE & harmonic analysis, geometric analysis, stochastic analysis & SPDE, plus a 15-row cross-domain bridge table. |
 | **Worked examples** | Three calibration targets: a finished PRL-style "Identifying the Gap" section, a paper-critique audit, a six-angle symbolic verification trace. |
@@ -98,7 +100,7 @@ The result is a model that can give you **actual partial advances**, **honest cr
 
 ### As a Claude Code Plugin
 
-The recommended way to use PhysicsForge with [Claude Code](https://claude.com/claude-code). This gives you the skill (auto-invoked based on your request) *and* six slash commands backed by real, test-covered verification scripts in `scripts/` — not just prose protocols.
+The recommended way to use PhysicsForge with [Claude Code](https://claude.com/claude-code). This gives you the skill (auto-invoked based on your request) *and* seven slash commands backed by real, test-covered verification scripts in `scripts/` — not just prose protocols.
 
 **Option A — via this repo's own marketplace:**
 
@@ -114,7 +116,7 @@ git clone https://github.com/linga009/PhysicsForge.git
 claude --plugin-dir ./PhysicsForge
 ```
 
-Once installed, `/audit`, `/gap-analysis`, `/citation-check`, `/derivation-check`, `/quantum-check`, and `/preregister` are available as slash commands, and the `physicsforge` skill auto-activates on relevant requests. See [Reference modules](#reference-modules) for what backs each command, and `scripts/STATUS.md` for what's genuinely automated versus still a judgment call.
+Once installed, `/audit`, `/gap-analysis`, `/verify`, `/citation-check`, `/derivation-check`, `/quantum-check`, and `/preregister` are available as slash commands, and the `physicsforge` skill auto-activates on relevant requests. The scripts need Python packages: `pip install -r scripts/requirements.txt` (sympy, numpy, scipy, z3-solver, citeguard-cli, einsteinpy). See [Reference modules](#reference-modules) for what backs each command, and `scripts/STATUS.md` for what's genuinely automated versus still a judgment call.
 
 ### As a Claude / Anthropic Skill
 
@@ -171,14 +173,19 @@ PhysicsForge/
 │   ├── citation-check.md              ← /citation-check
 │   ├── derivation-check.md            ← /derivation-check
 │   ├── quantum-check.md               ← /quantum-check
+│   ├── verify.md                      ← /verify (refute first, then prove)
 │   └── preregister.md                 ← /preregister
 │
 ├── scripts/                           ← real, test-backed verification tools
+│   ├── pfv/                           ← verification toolkit: 16 domains, ~140 checks,
+│   │                                     four honest verdicts (python -m pfv list)
+│   ├── tests/                         ← pfv planted-error + regression suite
+│   │                                     (python -m pfv selftest, 109 tests)
 │   ├── citation_guard.py              ← DOI/arXiv/retraction verification
-│   ├── deriv_check.py                 ← dimensional + limiting-case checks
-│   ├── quantum_check.py               ← QuTiP-backed QM/QI checks
 │   ├── prereg.sh                      ← git-ancestry pre-registration proof
-│   ├── test_*.py                      ← regression suites for each tool above
+│   ├── deriv_check.py                 ← kept only as the frozen pre-registration's instrument
+│   ├── test_*.py                      ← regression suites for the scripts above
+│   ├── requirements.txt               ← pip install -r scripts/requirements.txt
 │   └── STATUS.md                      ← what's genuinely automated vs. a judgment call
 │
 ├── skills/physicsforge/               ← Anthropic Skill format (also the
@@ -373,6 +380,7 @@ It is **not** built for:
 PhysicsForge is a **structured prompting framework**, not an oracle. Specific limitations:
 
 - **The model is still an LLM.** It can hallucinate citations, get algebra wrong, and miss obvious errors. The framework reduces these failures but does not eliminate them. **Always verify critical claims independently.**
+- **The `pfv` checks verify statements, not models.** A VERIFIED result means the statement you typed is true; it does not say it is the statement you meant or that the physics is right. The toolkit's regression suite uses planted errors written by the toolkit's author, so it shows the checks catch those errors, not that they catch every error, and it does not by itself show that answers improve. Several checks (z3 integer reasoning, Monte Carlo, floating-point matrices) can only return CONSISTENT or INCONCLUSIVE.
 - **Symbolic verification has a finite reach.** `sympy` cannot verify functional analysis estimates, weak-solution existence, convergence of approximation schemes, topological claims, compactness arguments, or spectral gaps. The framework explicitly flags this in [`verification.md`](./skills/physicsforge/references/verification.md).
 - **Web search is not always available.** When literature reconnaissance is needed and the model cannot search, it works from training-data knowledge and flags claims with `[VERIFY]`. Recent papers will be missing.
 - **Code execution is not always available.** Without it, the model performs manual symbolic checks and marks unverified algebra with `[UNVERIFIED ALGEBRA]`.

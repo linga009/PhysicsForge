@@ -10,8 +10,10 @@ description: >
   mandatory self-audit, audits uploaded research papers with the full Pauli Protocol
   and quantitative 8-dimension ScholarEval scoring, applies two-pass adversarial review
   with anti-sycophancy concession threshold, monitors long sessions for frame-lock and
-  premature convergence, bridges incompatible frameworks, verifies derivations symbolically,
-  and produces compilable LaTeX manuscripts with verified citations. Built specifically to
+  premature convergence, bridges incompatible frameworks, checks and tries to disprove
+  mathematical and physical claims with executable tools (number theory, group theory,
+  algebra, analysis, inequalities, probability, Lie algebras, quantum information, GR, QFT,
+  vector calculus, dimensions), and produces compilable LaTeX manuscripts with verified citations. Built specifically to
   detect and prevent the AI failure modes documented by Schwartz (Harvard, 2026): fake results,
   parameter adjustment to expected outcomes, formulas copied from wrong physical systems,
   the "trivial reduction trap," and the "Claude loves to please" sycophancy pattern. Also
@@ -55,7 +57,8 @@ modes in physics research.
 | Discover novel research ideas / find unsolved problems | `discovery.md` + `deep-search.md` |
 | Find gaps / open problems in [topic] | `gap-analysis.md` + `deep-search.md` |
 | Predict a formula / derive from first principles | `formula-prediction.md` |
-| Audit / generate / verify a derivation | `verification.md` + `anti-fabrication.md` + `adversarial-review.md` |
+| Audit / generate / verify a derivation | `verification-tools.md` (runnable `pfv` checks) + `anti-fabrication.md` + `adversarial-review.md`; `verification.md` for sympy patterns `pfv` does not cover |
+| Verify, check or try to disprove an identity, inequality, group or number-theory statement, calculation | `verification-tools.md` — refute first with `pfv`, then prove (`/verify`) |
 | Which method/technique to use for a derivation | `methods.md` (9-method ladder: dimensional → topological) |
 | Bridge two theories or frameworks | `theory-bridge.md` |
 | Write a research paper / LaTeX manuscript | `output-rules.md` + `latex-engine.md` + `citation-guard.md` |
@@ -92,18 +95,16 @@ one-off code for anything they cover:
 
 | Tool | Backs | Invoke |
 |---|---|---|
-| `scripts/citation_guard.py` | `citation-guard.md` / Phase 7 | `/citation-check <file>.jsonl` |
-| `scripts/deriv_check.py` | `verification.md` dimensional/limiting-case checks | `/derivation-check` |
-| `scripts/quantum_check.py` | QM/QI claims (unitarity, CPTP, CHSH, entanglement entropy) | `/quantum-check` |
-| `scripts/test_kerr_check.py` | Worked example: deriving a paper's result from a real tensor library, not a textbook formula | read directly as a template |
+| `scripts/pfv/` | Phase 6: refute-first verification across 16 domains (number theory, groups, algebra, analysis, inequalities via z3, probability, Lie algebras and anomalies, quantum information, GR and gauge theory, QFT, mechanics, vector calculus, dimensions, derivation chains). Menu and rules: `verification-tools.md` | `/verify`, `/derivation-check`, `/quantum-check` |
+| `scripts/citation_guard.py` | `citation-guard.md` / Phase 7 | `/citation-check` |
 | `scripts/prereg.sh` | Pre-registration: git-ancestry proof a prediction preceded its result | `/preregister` |
+| `scripts/test_kerr_check.py` | Worked example: deriving a paper's result from a real tensor library, not a textbook formula | read directly as a template |
+| `scripts/deriv_check.py` | Kept only as the instrument named by the frozen pre-registration in `preregistrations/`; use `pfv` for new work | — |
 
-These are test-backed (see each script's matching `test_*.py` and CI in
-`.github/workflows/tools-ci.yml`), not generated fresh each session — running them
-directly is more reliable than re-deriving the same check from scratch in sympy.
-Read `verification.md`'s "PREFER THE REAL TESTED TOOLS" section before writing new
-symbolic-verification code; it documents real bugs (symbol-identity traps,
-`simplify()`-as-zero-test false negatives) caught while building these tools.
+These are test-backed (`python -m pfv selftest` from `scripts/`: 109 planted-error and
+regression tests; the other scripts' `test_*.py`; all run in CI), not generated fresh
+each session — running them is more reliable than re-deriving the same check in sympy.
+Install everything with `pip install -r scripts/requirements.txt`.
 
 ---
 
@@ -402,24 +403,43 @@ inline as part of your response:
 If ANY check fails, do NOT present the result as final. Either fix it or downgrade
 the claim classification (Theorem → Proposition → Conjecture) and explain why.
 
-### PHASE 6 — Symbolic Verification (when code execution is available)
+### PHASE 6 — Verify by Trying to Disprove (when code execution is available)
 
-After any non-trivial derivation, verify it computationally. Read `verification.md`
-for code patterns. Minimum verification suite:
+After any non-trivial derivation or claimed result, try to **refute it first, then prove
+it**, with the executable toolkit in `scripts/pfv` (menu, rules and pitfalls:
+`verification-tools.md`; sympy patterns it does not cover: `verification.md`).
 
-- Dimensional analysis (sympy units module or manual)
-- Limiting cases (substitute and simplify)
-- Algebraic identities (sympy.simplify, sympy.expand, sympy.trigsimp)
-- Sign conventions (numerical evaluation at test points)
+```python
+import sys; sys.path.insert(0, "${CLAUDE_PLUGIN_ROOT}/scripts")   # or <repo>/scripts
+from pfv import numtheory, groups, algebra, analysis, dimensions, smt   # any of the 16 domains
+from pfv.core import report
+```
 
-Report verification results inline:
+Rules:
+
+- Every check returns one of four verdicts: REFUTED (exact witness, decisive), VERIFIED
+  (exact or exhaustive), CONSISTENT (passed a sample or tolerance, not a proof),
+  INCONCLUSIVE (could not decide).
+- Never write "Theorem" on a CONSISTENT result; label it Observation or `[NUMERICAL]`.
+  Say INCONCLUSIVE when the tool could not decide. Never hide a REFUTED.
+- Pass exact values (strings like `"1/3"`, `Fraction`, sympy `Rational`) when the claim is
+  exact. Floats are read exactly as written and can reach CONSISTENT at most as input.
+- Minimum suite for a derivation: dimensions, limiting cases, one refutation hunt for each
+  universal claim, and an exact check of each identity used. If code cannot run, say so.
+- Paste the `report(...)` output verbatim, including its "Not proven:" line:
 
 ```
 ═══════════ SYMBOLIC VERIFICATION ═══════════
-✓ Dimensions: [M L T^-2] consistent on both sides
-✓ Limit ℏ→0: reduces to classical equation [ref Eq.X]
-✓ Limit v/c→0: Galilean form recovered
-✗ Sign check: Eq.(7) sign flipped for j > 1 — investigating
+Target:    <what was checked>
+Tool used: pfv (python 3.x)
+
+Checks:
+  ✓ [VERIFIED] check_identity: ...
+  ~ [CONSISTENT] find_counterexample: ...
+      caveat:   Finite range only.
+
+Verdict:   CONSISTENT
+Not proven: find_counterexample (checked n < 10^4)
 ═════════════════════════════════════════════
 ```
 
@@ -527,7 +547,7 @@ Use these inline tags consistently:
 | "Write a paper on [topic]" | Full LaTeX manuscript — read `latex-engine.md` + `citation-guard.md` |
 | "Analyze / audit / critique this paper" | Full audit — `paper-analysis.md` + `anti-fabrication.md` |
 | "Find errors in [derivation]" | Line-by-line audit with verification |
-| "Verify this [equation/proof]" | Symbolic verification — `verification.md` |
+| "Verify / check / disprove this [equation, proof, inequality, group or number-theory claim]" | Refute first, then prove with `pfv` — `verification-tools.md` (`/verify`) |
 | "Verify these citations" | Citation Guard protocol — `citation-guard.md` |
 | "Score this paper" / "Run ScholarEval" | 8-dimension quantitative evaluation — `scholar-eval.md` |
 | "Adversarial review" / "Try to break this" | Two-pass advocate/adversary review — `adversarial-review.md` |
@@ -585,7 +605,8 @@ Use these inline tags consistently:
 - **`references/output-rules.md`** — Anti-truncation rules. Read for any paper output.
 - **`references/latex-engine.md`** — Full LaTeX paper generation engine.
 - **`references/paper-analysis.md`** — Workflow for auditing uploaded papers.
-- **`references/verification.md`** — Symbolic verification patterns (sympy + numerical).
+- **`references/verification-tools.md`** — The `scripts/pfv` toolkit: 16 domains, which check answers which question, verdict rules, the inexact-number rule, pitfalls, runnable examples (kept in step with the code by a test).
+- **`references/verification.md`** — Symbolic verification patterns (sympy + numerical), the fallback when `pfv` has no check for the question.
 - **`references/examples.md`** — Worked examples: PRL section, paper critique, verification trace.
 - **`references/domains.md`** — Domain-specific guidance: physics + math physics + PDE + geometric analysis.
 

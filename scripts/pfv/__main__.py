@@ -39,4 +39,8 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # A cp1252 console cannot print every docstring character; degrade to '?' instead of crashing `list`/`doc`.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     sys.exit(main(sys.argv))

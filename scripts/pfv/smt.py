@@ -14,7 +14,7 @@ import itertools
 
 import sympy as sp
 
-from .core import Result, verified, consistent, inconclusive, unify
+from .core import Result, verified, consistent, inconclusive, unify, to_exact, cap_inexact
 from .core import refuted as _refuted
 from .analysis import _S
 
@@ -43,7 +43,7 @@ class _Translator:
         return self.vars[s.name]
 
     def num(self, e):
-        e = sp.nsimplify(e) if not e.is_Rational else e
+        # Floats were already converted exactly by to_exact; never nsimplify here (it snaps 0.3333333333 to 1/3).
         if e.is_Integer:
             return _z3.IntVal(int(e)) if self.integers else _z3.RealVal(int(e))
         if e.is_Rational:
@@ -192,9 +192,22 @@ def check_real_claim(claim, hypotheses=(), integers=(), timeout_ms: int = 20000)
     text = f"{claim}" + (f"  given  {', '.join(map(str, hypotheses))}" if hypotheses else "")
     if _z3 is None:
         return inconclusive(name, text, _HINT)
+    res = _check_real_claim(claim, hypotheses, integers, timeout_ms, name, text)
+    return cap_inexact(res, "claim") if res.data.pop("_inexact", False) and res.decisive else res
+
+
+def _check_real_claim(claim, hypotheses, integers, timeout_ms, name, text) -> Result:
+    inexact = False
     try:
         c = _as_formula(claim)
         hs = [_as_formula(h) for h in hypotheses]
+        c, inexact = to_exact(c)
+        exact_hs = []
+        for h in hs:
+            h, i = to_exact(h)
+            inexact = inexact or i
+            exact_hs.append(h)
+        hs = exact_hs
         allf = unify(c, *hs) if hs else [unify(c)]
         allf = allf if isinstance(allf, list) else [allf]
         c, hs = allf[0], allf[1:]
@@ -213,7 +226,7 @@ def check_real_claim(claim, hypotheses=(), integers=(), timeout_ms: int = 20000)
         return verified(name, text, f"z3 {_z3.get_version_string()}: hypotheses and not(claim) is unsatisfiable"
                         + (" (real closed field decision procedure)" if not integers else " (integer reasoning is sound but incomplete)")
                         + ("; holds on the domain where every denominator is nonzero and every square root is real" if tr.domain else ""),
-                        solver="z3")
+                        solver="z3", _inexact=inexact)
     if r == _z3.unknown:
         hint = "; nonlinear integer/modular claims are often beyond z3: try pfv.numtheory (check_congruence, modular_obstruction, check_lte) or a proof by descent" if integers else ""
         return inconclusive(name, text, f"z3 returned unknown ({s.reason_unknown()}){hint}")
@@ -235,7 +248,7 @@ def check_real_claim(claim, hypotheses=(), integers=(), timeout_ms: int = 20000)
         return inconclusive(name, text, f"z3 model could not be re-checked in sympy ({type(e).__name__}); model {wit}")
     if hyp_ok and not claim_ok:
         ev = "z3 model re-checked in exact rational arithmetic" if exact else "z3 model (algebraic numbers) re-checked at 30 digits"
-        return _refuted(name, text, {k: str(v) for k, v in wit.items()}, evidence=ev)
+        return _refuted(name, text, {k: str(v) for k, v in wit.items()}, evidence=ev, _inexact=inexact)
     return inconclusive(name, text, f"z3 reported a model that sympy does not confirm (division-by-zero or sqrt convention?): {wit}")
 
 

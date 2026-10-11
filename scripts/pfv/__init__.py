@@ -1,6 +1,6 @@
 """pfv: PhysicsForge verification toolkit.
 
-    import sys; sys.path.insert(0, "<skill>/scripts")
+    import sys; sys.path.insert(0, "${CLAUDE_PLUGIN_ROOT}/scripts")   # or <repo>/scripts
     from pfv import numtheory, groups, lie, quantum, linalg, analysis, derivation, dimensions, geometry, mechanics, combinat
     from pfv import algebra, probability, qft, vectorcalc, smt
     from pfv.core import report

@@ -12,70 +12,117 @@ import numpy as np
 import sympy as sp
 from sympy import Matrix, Rational
 
-from .core import Result, verified, consistent, inconclusive, TOL
+from .core import Result, verified, consistent, inconclusive, TOL, to_exact, cap_inexact, compare_claimed
 from .core import refuted as _refuted
 from functools import partial as _partial
 refuted = _partial(_refuted, evidence="witness (exact for rational input, else floating-point beyond tolerance)")
 
 
-def _exact(M) -> Matrix:
+def _exact(M):
+    """(exact sympy Matrix, inexact). Float entries are read exactly as written (core.to_exact), never snapped:
+    nsimplify turned [[1, 0.3333333333], [3, 1]] (det 1e-10) into a singular matrix."""
     if isinstance(M, Matrix):
-        return M
-    rows = np.asarray(M).tolist()
-    return Matrix(rows).applyfunc(lambda x: sp.nsimplify(x, rational=True))
+        Me, inexact = to_exact(M)
+        return Matrix(Me), inexact
+    inexact = False
+    rows = []
+    for row in np.asarray(M, dtype=object).tolist():
+        out = []
+        for x in (row if isinstance(row, list) else [row]):
+            v, i = to_exact(x)
+            inexact = inexact or i
+            out.append(v)
+        rows.append(out)
+    return Matrix(rows), inexact
+
+
+def _done(res: Result, inexact: bool) -> Result:
+    return cap_inexact(res, "matrix") if inexact else res
 
 
 def check_rank(M, claimed: int) -> Result:
     """Exact rank (rational elimination) against a claim; shows numpy's tolerance-based rank for contrast."""
-    Me = _exact(M)
+    Me, inexact = _exact(M)
     r = Me.rank()
     claim = f"rank = {claimed}"
     if r == claimed:
-        return verified("check_rank", claim, "exact rational elimination", rank=r)
-    return refuted("check_rank", claim, {"true_rank": r, "numpy_rank": int(np.linalg.matrix_rank(np.array(Me.tolist(), dtype=float)))},
-                   detail="numpy.linalg.matrix_rank is tolerance dependent; the exact value is shown")
+        return _done(verified("check_rank", claim, "exact rational elimination", rank=r), inexact)
+    return _done(refuted("check_rank", claim, {"true_rank": r, "numpy_rank": int(np.linalg.matrix_rank(np.array(Me.tolist(), dtype=float)))},
+                         detail="numpy.linalg.matrix_rank is tolerance dependent; the exact value is shown"), inexact)
 
 
 def check_determinant(M, claimed) -> Result:
-    """Exact determinant against a claimed value."""
-    d = _exact(M).det()
+    """Exact determinant against a claimed value (a float claim within 1e-9 of the exact value is CONSISTENT, not VERIFIED)."""
+    Me, inexact = _exact(M)
+    d = Me.det()
     claim = f"det = {claimed}"
-    if sp.simplify(d - sp.sympify(claimed)) == 0:
-        return verified("check_determinant", claim, "exact")
-    return refuted("check_determinant", claim, {"true_det": d})
+    status, _, _ = compare_claimed(d, claimed)
+    if status == "equal":
+        return _done(verified("check_determinant", claim, "exact"), inexact)
+    if status == "approx":
+        return _done(consistent("check_determinant", claim, f"exact det = {d}; the claimed decimal agrees within {TOL:g}",
+                                caveat="the claimed value is a decimal approximation"), inexact)
+    if status == "differ":
+        return _done(refuted("check_determinant", claim, {"true_det": d}), inexact)
+    return inconclusive("check_determinant", claim, f"could not decide whether det = {d} equals the claim")
 
 
 def check_eigenvalues_exact(M, claimed) -> Result:
-    """Claimed spectrum as a list with multiplicity or a dict {eigenvalue: multiplicity} (exact)."""
-    Me = _exact(M)
+    """Claimed spectrum as a list with multiplicity or a dict {eigenvalue: multiplicity} (exact).
+
+    Float claims are read exactly as written; a spectrum that matches only within 1e-9 is CONSISTENT, not VERIFIED."""
+    Me, inexact = _exact(M)
     ev = Me.eigenvals()
-    if not isinstance(claimed, dict):
-        claimed_d = {}
-        for c in claimed:
-            c = sp.nsimplify(c)
-            claimed_d[c] = claimed_d.get(c, 0) + 1
-    else:
-        claimed_d = {sp.nsimplify(k): v for k, v in claimed.items()}
+    items = list(claimed.items()) if isinstance(claimed, dict) else [(c, 1) for c in claimed]
+    claimed_d = {}
+    for c, m in items:
+        claimed_d[c] = claimed_d.get(c, 0) + m
     claim = f"eigenvalues = {claimed_d}"
-    ok = len(ev) == len(claimed_d) and all(any(sp.simplify(k - c) == 0 and v == claimed_d[c] for c in claimed_d) for k, v in ev.items())
-    if ok:
-        return verified("check_eigenvalues_exact", claim, "exact characteristic polynomial roots with multiplicity")
-    return refuted("check_eigenvalues_exact", claim, {"true": ev})
+    if sum(claimed_d.values()) != sum(ev.values()):
+        return _done(refuted("check_eigenvalues_exact", claim, {"true": ev},
+                             detail=f"{sum(ev.values())} eigenvalues with multiplicity, claimed {sum(claimed_d.values())}"), inexact)
+    # match each true eigenvalue to a claimed one; worst status over the matching decides
+    remaining = dict(claimed_d)
+    worst = "equal"
+    rank = {"equal": 0, "approx": 1, "unknown": 2, "differ": 3}
+    for k, mult in ev.items():
+        best = None
+        for c in remaining:
+            if remaining[c] < mult:
+                continue
+            status, _, _ = compare_claimed(k, c)
+            if best is None or rank[status] < rank[best[0]]:
+                best = (status, c)
+        if best is None:
+            return _done(refuted("check_eigenvalues_exact", claim, {"true": ev}, detail=f"no claimed eigenvalue with multiplicity {mult} for {k}"), inexact)
+        status, c = best
+        remaining[c] -= mult
+        if remaining[c] == 0:
+            del remaining[c]
+        worst = max(worst, status, key=rank.get)
+    if worst == "equal":
+        return _done(verified("check_eigenvalues_exact", claim, "exact characteristic polynomial roots with multiplicity"), inexact)
+    if worst == "approx":
+        return _done(consistent("check_eigenvalues_exact", claim, f"exact spectrum {ev}; the claimed decimals agree within {TOL:g}",
+                                caveat="claimed eigenvalues are decimal approximations"), inexact)
+    if worst == "differ":
+        return _done(refuted("check_eigenvalues_exact", claim, {"true": ev}), inexact)
+    return inconclusive("check_eigenvalues_exact", claim, f"could not decide equality of the exact spectrum {ev} with the claim")
 
 
 def check_diagonalizable(M, claimed: bool) -> Result:
     """Is the matrix diagonalizable (exact)? Compared with the claim."""
-    Me = _exact(M)
+    Me, inexact = _exact(M)
     truth = Me.is_diagonalizable()
     claim = f"matrix is {'' if claimed else 'not '}diagonalizable"
     if truth == claimed:
-        return verified("check_diagonalizable", claim, "exact (algebraic = geometric multiplicity)")
-    return refuted("check_diagonalizable", claim, {"truth": truth}, detail="compare geometric and algebraic multiplicities")
+        return _done(verified("check_diagonalizable", claim, "exact (algebraic = geometric multiplicity)"), inexact)
+    return _done(refuted("check_diagonalizable", claim, {"truth": truth}, detail="compare geometric and algebraic multiplicities"), inexact)
 
 
 def check_cayley_hamilton(M) -> Result:
     """p(A) = 0 for the characteristic polynomial of A (exact rational evaluation)."""
-    Me = _exact(M)
+    Me, inexact = _exact(M)
     lam = sp.Symbol("lam")
     p = Me.charpoly(lam)
     coeffs = p.all_coeffs()
@@ -83,9 +130,9 @@ def check_cayley_hamilton(M) -> Result:
     acc = sp.zeros(n)
     for c in coeffs:
         acc = acc * Me + c * sp.eye(n)
-    if acc == sp.zeros(n):
-        return verified("check_cayley_hamilton", f"p(A) = 0 with p = {p.as_expr()}", "exact matrix polynomial evaluation (Horner)")
-    return refuted("check_cayley_hamilton", "p(A) = 0", acc)
+    if acc.applyfunc(sp.simplify) == sp.zeros(n):
+        return _done(verified("check_cayley_hamilton", f"p(A) = 0 with p = {p.as_expr()}", "exact matrix polynomial evaluation (Horner)"), inexact)
+    return _done(refuted("check_cayley_hamilton", "p(A) = 0", acc), inexact)
 
 
 def check_positive_definite(M, kind: str = "pd") -> Result:
@@ -94,7 +141,10 @@ def check_positive_definite(M, kind: str = "pd") -> Result:
     arr = np.asarray(M)
     exact_input = isinstance(M, Matrix) or np.issubdtype(arr.dtype, np.integer) or arr.dtype == object
     if exact_input:
-        Me = _exact(M)
+        Me, inexact = _exact(M)
+        if inexact:  # object array holding floats: use the floating-point path below
+            exact_input = False
+    if exact_input:
         if Me != Me.T:
             return refuted("check_positive_definite", claim, None, detail="not symmetric (definiteness is about the symmetric part)")
         truth = {"pd": Me.is_positive_definite, "psd": Me.is_positive_semidefinite,
@@ -110,8 +160,8 @@ def check_positive_definite(M, kind: str = "pd") -> Result:
             truth = {"pd": Me.is_positive_definite, "psd": Me.is_positive_semidefinite, "nd": Me.is_negative_definite, "nsd": Me.is_negative_semidefinite}[kind]
             note = "exact arithmetic on the float64 values as stored (e.g. 0.1 is 0.1000000000000000055...)"
             if truth:
-                return verified("check_positive_definite", claim, note)
-            return refuted("check_positive_definite", claim, {"min_eigenvalue_float": float(np.linalg.eigvalsh((A + A.T) / 2).min())}, evidence=note)
+                return cap_inexact(verified("check_positive_definite", claim, note), "matrix")
+            return cap_inexact(refuted("check_positive_definite", claim, {"min_eigenvalue_float": float(np.linalg.eigvalsh((A + A.T) / 2).min())}, evidence=note), "matrix")
     w = np.linalg.eigvalsh((A + A.T) / 2)
     tol = 1e-12 * max(1.0, np.abs(w).max()) * len(w)
     if kind in ("pd", "psd"):

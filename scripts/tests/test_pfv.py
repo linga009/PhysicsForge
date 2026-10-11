@@ -651,8 +651,13 @@ class TestRedTeamRegressions(Base):
         self.proved(an.check_convergence("1/log(n+1)", "n", False)); self.proved(an.check_convergence("n**2/2**n", "n", True))
 
     def test_float_definiteness_is_exact_or_inconclusive(self):
-        self.proved(la.check_positive_definite(np.array([[1.0, 1.0], [1.0, 1 + 1e-14]]), "pd"))   # exact arithmetic on the stored floats
-        self.bad(la.check_positive_definite(np.array([[1.0, 1.0], [1.0, 1.0]]), "pd")); self.proved(la.check_positive_definite(np.array([[1.0, 1.0], [1.0, 1.0]]), "psd"))
+        # exact arithmetic on the stored floats gives the right answer, but float input caps it at CONSISTENT:
+        # [[1,1],[1,1+1e-14]] is what float noise makes of the singular [[1,1],[1,1]], so VERIFIED pd would be a false proof
+        r = la.check_positive_definite(np.array([[1.0, 1.0], [1.0, 1 + 1e-14]]), "pd")
+        self.assertEqual(r.verdict, CONSISTENT, str(r)); self.assertIn("exact arithmetic", r.evidence)
+        self.bad(la.check_positive_definite(np.array([[1.0, 1.0], [1.0, 1.0]]), "pd"))
+        self.assertEqual(la.check_positive_definite(np.array([[1.0, 1.0], [1.0, 1.0]]), "psd").verdict, CONSISTENT)
+        self.proved(la.check_positive_definite(sp.Matrix([[1, 1], [1, 1]]), "psd"))          # exact input stays decisive
         rng = np.random.default_rng(0); B = rng.normal(size=(15, 15))
         self.ok(la.check_positive_definite(B @ B.T + 1e-3 * np.eye(15), "pd"))
         self.bad(la.check_positive_definite(-(B @ B.T) - np.eye(15), "pd"))
@@ -923,12 +928,15 @@ class TestRegistry(Base):
 class TestDocs(Base):
     """The tool menu in references/verification-tools.md must stay in step with the code, and its examples must run."""
 
-    DOC = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "references", "verification-tools.md")
+    # scripts/tests/ -> repo root -> skills/physicsforge/references/ (the plugin layout)
+    DOC = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                       "skills", "physicsforge", "references", "verification-tools.md")
+
+    def test_doc_exists(self):
+        self.assertTrue(os.path.exists(self.DOC), f"verification-tools.md not found at {self.DOC}: the doc tests would silently skip")
 
     def test_every_check_is_documented(self):
         import pfv
-        if not os.path.exists(self.DOC):
-            self.skipTest("doc not found")
         txt = open(self.DOC, encoding="utf-8").read()
         missing = []
         for d in pfv.DOMAINS:
@@ -939,12 +947,151 @@ class TestDocs(Base):
 
     def test_doc_examples_run(self):
         import re
-        if not os.path.exists(self.DOC):
-            self.skipTest("doc not found")
         blocks = re.findall(r"```python\n(.*?)```", open(self.DOC, encoding="utf-8").read(), re.S)
         self.assertGreaterEqual(len(blocks), 3)
+        z3_missing = smt._z3 is None
         for i, b in enumerate(blocks):
+            if z3_missing and "smt." in b:
+                continue  # these examples assert z3 verdicts; without z3 they are correctly INCONCLUSIVE (tested in TestSMT)
             exec(compile(b, f"verification-tools.md block {i}", "exec"), {})
+
+
+class TestInexactNumberRule(Base):
+    """Regressions for the float-snapping soundness bug: nsimplify turned 0.3333333333 into 1/3 (and similar), so a FALSE
+    claim came back VERIFIED. Each case below was a false VERIFIED before the core.to_exact rule."""
+
+    def test_smt_float_constant_is_not_snapped(self):
+        if smt._z3 is None:
+            self.skipTest("z3 not installed")
+        x = sp.Symbol("x")
+        r = smt.check_real_claim(sp.Ge(sp.Float("0.3333333333") * x, x / 3), [sp.Gt(x, 0)])   # FALSE: 0.3333333333 < 1/3
+        self.bad(r)
+        self.assertIn("floating-point", r.caveat)
+        r = smt.check_real_claim(sp.Gt(x / 3, sp.Float("0.3333333333") * x), [sp.Gt(x, 0)])   # true for the decimal as written
+        self.assertEqual(r.verdict, CONSISTENT, str(r))                                       # ...but float input cannot be VERIFIED
+        self.proved(smt.check_real_claim("x/3 > 0.3333333333*x", ["x>0"]))                    # a typed decimal string is exact
+
+    def test_linalg_float_entries_are_not_snapped(self):
+        M = [[1, 0.3333333333], [3, 1]]                                                       # det = 1e-10, rank 2
+        self.bad(la.check_rank(M, 1))
+        self.bad(la.check_determinant(M, 0))
+        self.assertEqual(la.check_rank(M, 2).verdict, CONSISTENT)
+        self.proved(la.check_rank(sp.Matrix([[1, sp.Rational(1, 3)], [3, 1]]), 1))           # the exact matrix IS singular
+
+    def test_claimed_decimal_values(self):
+        self.bad(la.check_eigenvalues_exact([[1, 0], [0, 2]], {1: 1, 2.001: 1}))
+        r = la.check_eigenvalues_exact([[1, 0], [0, 2]], {1: 1, 2.0000000000001: 1})
+        self.assertEqual(r.verdict, CONSISTENT, str(r))                                       # within 1e-9: approximation, not exact
+        self.proved(la.check_eigenvalues_exact([[1, 0], [0, 2]], [1, 2]))
+        die = range(1, 7)
+        self.assertEqual(pb.check_probability(die, lambda o: o == 1, 0.1666666666).verdict, CONSISTENT)
+        self.bad(pb.check_probability(die, lambda o: o == 1, 0.17))
+        self.bad(pb.check_probability(die, lambda o: o == 1, "1666666666/10000000000"))      # an exact claim is judged exactly
+        self.proved(pb.check_probability(die, lambda o: o == 1, "1/6"))
+        self.proved(pb.check_expectation(die, lambda o: o, 3.5))                             # 3.5 is exactly 7/2
+        self.assertEqual(nt.check_claimed_value(1 / 3, sp.Rational(1, 3)).verdict, CONSISTENT)  # float recomputation never proves
+
+    def test_to_exact(self):
+        from pfv.core import to_exact
+        self.assertEqual(to_exact(0.1), (sp.Rational(1, 10), True))
+        self.assertEqual(to_exact(0.3333333333)[0], sp.Rational(3333333333, 10 ** 10))
+        self.assertEqual(to_exact("1/3"), (sp.Rational(1, 3), False))
+        self.assertEqual(to_exact(Fraction(2, 7)), (sp.Rational(2, 7), False))
+        e, inexact = to_exact(sp.Float("0.25") * sp.Symbol("x"))
+        self.assertTrue(inexact); self.assertEqual(e, sp.Symbol("x") / 4)
+
+
+class TestPortability(Base):
+    def test_report_survives_a_cp1252_console(self):
+        import io
+        from pfv import core
+        r = nt.check_claimed_value(4, 4)
+        old = sys.stdout
+        sys.stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+        try:
+            txt = report([r], "t")
+            print(txt)                      # raised UnicodeEncodeError before core.console_safe
+            print(str(r))
+        finally:
+            sys.stdout = old
+        self.assertIn("=====", txt)
+        self.assertNotIn("═", txt)
+
+    def test_timeout_fires_on_every_platform(self):
+        from pfv.core import timeout, CheckTimeout
+        import time
+        t0 = time.time()
+        with self.assertRaises(CheckTimeout):
+            with timeout(0.5):
+                while True:                 # pure-Python busy loop, like a long sympy simplify
+                    pass
+        self.assertLess(time.time() - t0, 5)
+        with timeout(5):                    # a body that finishes in time is untouched
+            sum(range(1000))
+
+
+class TestEntanglementEntropy(Base):
+    def test_bell_and_product(self):
+        bell = np.array([1, 0, 0, 1]) / np.sqrt(2)
+        self.proved(qm.check_entanglement_entropy(bell, (2, 2), [0], 1.0))
+        self.bad(qm.check_entanglement_entropy(bell, (2, 2), [0], 0.5))
+        self.proved(qm.check_entanglement_entropy(np.kron([1, 0], [0, 1]), (2, 2), [1], 0.0))
+        r = qm.check_entanglement_entropy(np.eye(4) / 4, (2, 2), [0], 1.0)          # mixed: marginal entropy, not entanglement
+        self.proved(r); self.assertIn("NOT an entanglement measure", r.caveat)
+        self.assertEqual(qm.check_entanglement_entropy(np.eye(4), (2, 2), [0], 1.0).verdict, INCONCLUSIVE)  # trace 4: not a state
+
+
+class TestProjectManuscriptClaims(Base):
+    """The real claims from this project's manuscripts, as checked by scripts/test_deriv_check.py and the retired
+    test_quantum_check.py, re-checked through pfv. quantum_check.py was retired on this basis; deriv_check.py is kept
+    only because the frozen pre-registration in preregistrations/ names it as its instrument."""
+
+    def _tc(self):
+        lam, wlog, mu, kB = sp.symbols("lambda omega_log mu_star k_B", positive=True)
+        f1 = (1 + (lam / (sp.Rational("2.46") * (1 + sp.Rational("3.8") * mu))) ** sp.Rational(3, 2)) ** sp.Rational(1, 3)
+        L2 = sp.Rational("1.82") * (1 + sp.Rational("6.3") * mu) * sp.Rational(6, 5)
+        f2 = 1 + (sp.Rational(1, 5) * lam ** 2) / (lam ** 2 + L2 ** 2)
+        Tc = f1 * f2 * wlog / (sp.Rational(12, 10) * kB) * sp.exp(-sp.Rational("1.04") * (1 + lam) / (lam - mu * (1 + sp.Rational(62, 100) * lam)))
+        return Tc, lam, wlog, mu, kB
+
+    def test_allen_dynes_tc_is_linear_in_omega_log(self):            # Superconductivity v4, Eq. (AD)
+        Tc, lam, wlog, mu, kB = self._tc()
+        self.proved(an.check_identity(Tc.subs(wlog, 2 * wlog), 2 * Tc))
+
+    def test_printed_constant(self):                                  # C(1.5, 0.13) = 1.335701 K/meV as printed
+        Tc, lam, wlog, mu, kB = self._tc()
+        C = (Tc.subs({lam: sp.Rational(3, 2), mu: sp.Rational(13, 100), kB: sp.Rational(8617333262, 10 ** 11)}) / wlog)
+        r = nt.check_claimed_value(C, 1.335701)
+        self.assertNotEqual(r.verdict, VERIFIED)                       # a 7-digit printed decimal is not the exact value
+        self.assertLess(abs(float(C) - 1.335701), 1e-5)               # but it agrees to the printed precision
+
+    def test_biaxial_and_epitaxial(self):                             # Superconductivity v4, Ch. 6
+        s = sp.Symbol("sigma")
+        self.proved(an.check_identity(sp.Rational(1, 3) * (s + s + 0), sp.Rational(2, 3) * s))
+        Y, nu, da = sp.symbols("Y nu da_a")
+        self.proved(nt.check_claimed_value((Y / (1 - nu) * da).subs({Y: 600, nu: sp.Rational(1, 4), da: sp.Rational(5, 100)}), 40))
+
+    def test_work_dimensions(self):                                   # Carbon Capture v2: [W] = [R][T], W = R T ln(1/x)
+        D = dm.Dim
+        energy = D(M=1, L=2, T=-2)
+        table = {"W": energy / D(N=1), "R": energy / (D(Th=1) * D(N=1)), "Temp": D(Th=1), "x": D()}
+        self.ok(dm.check_dimensions("W", "R*Temp*log(1/x)", table))
+
+    def test_withdrawn_300K_claim_is_refuted(self):                   # 0.18*4.5*400 meV / k_B is ~3759.86 K, not 300 K
+        val = sp.Rational(18, 100) * sp.Rational(9, 2) * 400 / sp.Rational(8617333262, 10 ** 11)
+        r = nt.check_claimed_value(val, 300)
+        self.bad(r)
+        self.assertAlmostEqual(float(val), 3759.8638714455697, places=6)
+
+    def test_tsirelson_bound_and_depolarizing_channel(self):          # formerly test_quantum_check.py
+        Z, X = qm.SZ, qm.SX
+        A0, A1, B0, B1 = Z, X, (Z + X) / np.sqrt(2), (Z - X) / np.sqrt(2)
+        bell_op = np.kron(A0, B0) + np.kron(A0, B1) + np.kron(A1, B0) - np.kron(A1, B1)
+        self.proved(qm.check_eigenvalues(bell_op, [-2 * np.sqrt(2), 0, 0, 2 * np.sqrt(2)]))   # max |S| = 2 sqrt 2 > 2
+        p = 0.3
+        K = [np.sqrt(1 - 3 * p / 4) * qm.I2, np.sqrt(p / 4) * X, np.sqrt(p / 4) * qm.SY, np.sqrt(p / 4) * Z]
+        self.proved(qm.check_channel(K, 2))
+        self.bad(qm.check_channel([K[0], K[1], K[3]], 2))             # Y term deliberately omitted: not trace preserving
 
 
 if __name__ == "__main__":

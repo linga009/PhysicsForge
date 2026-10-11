@@ -11,11 +11,47 @@ instead of asserted in prose. The judgment-heavy protocols (Pauli reasoning
 itself, ScholarEval, adversarial review, Discovery Engine) are not being
 converted to hard automation — see "What stays prompt-only" below, and why.
 
-**Pushed.** Branch `tool/pre-registration` on `linga009/PhysicsForge`, PR #2:
-<https://github.com/linga009/PhysicsForge/pull/2>. Not yet merged — that's
-still a separate, explicit decision. "Wired into CI" and "observed passing
-in CI" were kept as different claims right up until they became the same
-claim, for real — see below.
+## Current status (October 2026) — read this first
+
+The sections below this one are the history of how each tool was built and are
+kept as written. What changed since:
+
+- **Location.** `tools/` is now `scripts/`, inside the Claude Code plugin layout
+  (PR #3, which superseded PR #2).
+- **`pfv/` is the verification toolkit** (16 domains, about 140 checks, four
+  verdicts; `python -m pfv selftest`, 109 tests). It was merged from
+  `feat/pfv-verification-toolkit` and red-teamed before merging. Five real bugs
+  were found and fixed, each with a regression test that fails on the original
+  code:
+  1. **False VERIFIED (soundness):** `nsimplify` snapped floats such as
+     `0.3333333333` to `1/3` before exact decisions, in linalg, probability,
+     numtheory, smt, algebra and analysis.
+  2. **Windows:** `report()` crashed on a cp1252 console.
+  3. **Windows:** timeouts silently did nothing (SIGALRM is missing there).
+  4. The docs tests skipped silently after the move.
+  5. The docs test failed instead of skipping when z3 was missing.
+
+  See CHANGELOG 3.0.0, "Fixed — found by red-teaming `pfv`".
+- **`quantum_check.py` / `test_quantum_check.py` retired.** Every claim they
+  covered runs through `pfv` (`tests/test_pfv.py::TestProjectManuscriptClaims`);
+  `pfv.quantum.check_entanglement_entropy` was added for the one capability only
+  `quantum_check` had. `qutip` is no longer a dependency.
+- **`deriv_check.py` kept, deliberately.** The frozen pre-registration
+  `preregistrations/2026-09-28-isotope-shift.md` names it as its instrument, so
+  it stays (with `test_deriv_check.py`) to keep that record reproducible. Use
+  `pfv` for new work.
+- **Pauli Protocol coverage** now runs through `pfv`: [5] dimensional
+  (`dimensions`), [6] limiting cases (`analysis.check_limit`), [4]
+  conservation/symmetry (`mechanics.check_conserved_on_shell`,
+  `check_conserved_hamiltonian`, `check_poisson`; `geometry.check_covariant_conservation`). The judgment-call checks stay prompt-only, for the
+  reasons below.
+- **Still open:** the `citation-spot-check` CI job's Crossref `http_406` on
+  GitHub runner IPs (below) is not fixed.
+
+**History (pre-plugin).** Branch `tool/pre-registration` on `linga009/PhysicsForge`, PR #2:
+<https://github.com/linga009/PhysicsForge/pull/2>, since closed in favour of PR #3.
+"Wired into CI" and "observed passing in CI" were kept as different claims right
+up until they became the same claim, for real — see below.
 
 ## CI — `.github/workflows/tools-ci.yml`
 

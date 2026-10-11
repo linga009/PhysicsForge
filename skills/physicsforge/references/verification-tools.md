@@ -8,15 +8,18 @@ and thermodynamics, vector calculus, QFT gamma-matrix algebra, dimensional analy
 ## Use
 
 ```python
-import sys; sys.path.insert(0, "<skill dir>/scripts")        # the folder that contains pfv/
-from pfv import numtheory, groups, lie, algebra, smt          # any domain: pfv.DOMAINS lists all 16
+import sys; sys.path.insert(0, "${CLAUDE_PLUGIN_ROOT}/scripts")   # plugin install; in a clone use <repo>/scripts
+from pfv import numtheory, groups, lie, algebra, smt              # any domain: pfv.DOMAINS lists all 16
 from pfv.core import report
 ```
 
-- Menu of every check and its arguments: `python3 -m pfv list` (or `list <domain>`).
-- Full docstring of one check: `python3 -m pfv doc check_isomorphic`.
-- The toolkit's own regression suite (planted errors, about 2 minutes): `python3 -m pfv selftest`.
-- Needs `sympy`, `numpy`, `scipy`; `smt` also needs `z3-solver` (without it those checks return INCONCLUSIVE with an install hint).
+- Menu of every check and its arguments: `python -m pfv list` (or `list <domain>`), run from `scripts/`.
+- Full docstring of one check: `python -m pfv doc check_isomorphic`.
+- The toolkit's own regression suite (planted errors, about 3 minutes): `python -m pfv selftest`.
+- Needs `sympy`, `numpy`, `scipy`; `smt` also needs `z3-solver` (without it those checks return INCONCLUSIVE with an
+  install hint). `pip install -r scripts/requirements.txt` installs everything.
+- Works on Windows: reports fall back to ASCII on a console that cannot print `═ ✓ ✗`, and check timeouts fire there
+  too (a timer thread interrupts the main thread instead of SIGALRM).
 
 ## The loop: prove or disprove
 
@@ -73,6 +76,7 @@ A typo, an unknown symbol or a wrong coordinate name is INCONCLUSIVE, never REFU
 | Dimensions of both sides, natural units, number of dimensionless groups | `dimensions.check_dimensions`, `check_expected_dimension`, `check_pi_count` |
 | Spin algebra, Pauli algebra, Hermitian, unitary, density matrix | `quantum.check_angular_momentum_algebra`, `check_pauli_algebra`, `check_hermitian`, `check_unitary`, `check_density_matrix` |
 | Is this map a valid channel? Lindblad generator? Entangled? Uncertainty relation? | `check_channel`, `check_lindblad_generator`, `check_entangled`, `check_uncertainty` |
+| Entanglement entropy of a bipartite pure state (bits) | `quantum.check_entanglement_entropy` (flags a mixed global state: then it is only the marginal's entropy) |
 | Is this inequality true for all states? | `quantum.hunt_state_counterexample` (hunt; a pass is CONSISTENT) |
 | Lie algebra closure, Casimir, irrep dimension (A to G) | `lie.check_lie_algebra`, `check_casimir_sum_rule`, `check_irrep_dimension`, `check_decomposition` |
 | Anomaly cancellation, SU(N) cubic coefficient, beta coefficients | `check_anomaly_free`, `check_su_cubic`, `sm_beta_coefficients` |
@@ -102,7 +106,15 @@ Also available: `numtheory.check_claimed_value`, `check_arithmetic_identity`, `c
 - Conventions change signs. State yours: Casimir sum rule `dim(R) C2(R) = dim(G) T(R)`; thermodynamic Euler relation
   `U = TS - pV + mu N`; sign of `eps^{0123}` (the QFT checks take `eps0123`); Cartan matrix convention for G2.
 - `z3` checks add the side conditions "denominator is nonzero" and "square-root argument is nonnegative". A VERIFIED result then holds on that domain, and the evidence says so.
-- Float input can reach CONSISTENT at most. Matrices are decided exactly only when entries are rational (or small float matrices, as exact binary fractions).
+- **Floats are never snapped.** A Python float or sympy Float is read exactly as written: `0.3333333333` is
+  3333333333/10^10, not 1/3. (Earlier versions snapped it with `nsimplify`, and a false claim could come back VERIFIED.)
+  - A claimed value given as a float: exact equality is VERIFIED, agreement within 1e-9 is CONSISTENT ("approximation,
+    not the exact value"), a larger gap is REFUTED. So `0.1666666666` for P = 1/6 is CONSISTENT; `0.17` is REFUTED.
+  - Input data given as floats (matrix entries, constants in a `smt` claim) can reach CONSISTENT at most: a proof about
+    approximate numbers is not a proof about the exact values they stand for. A REFUTED witness is kept, with a caveat
+    that it holds for the decimals as written.
+  - Strings are what you typed: `"1/3"` and `"0.5"` are exact. Pass exact values as strings, `Fraction`s or sympy
+    `Rational`s whenever the claim is exact.
 - Expression strings in `qft.check_gamma_identity` and `vectorcalc.check_vector_identity` are evaluated as Python. Do not pass untrusted text.
 - A VERIFIED result says the statement you typed is true. Check that it is the statement you meant.
 
@@ -146,6 +158,20 @@ m1 = al.check_minimal_polynomial("sqrt(2)+sqrt(3)", "x**4-10*x**2+1")
 m2 = al.check_minimal_polynomial("sqrt(2)", "x**4-4")
 
 assert [r.verdict for r in (good, bad, v1, v2, m1, m2)] == ["VERIFIED", "REFUTED", "VERIFIED", "REFUTED", "VERIFIED", "REFUTED"]
+```
+
+```python
+from fractions import Fraction
+from pfv import probability as pb, linalg as la
+
+# Floats are read exactly as written, never snapped to a "nice" rational.
+die = range(1, 7)
+exact = pb.check_probability(die, lambda o: o == 1, Fraction(1, 6))      # exact claim, exact truth
+approx = pb.check_probability(die, lambda o: o == 1, 0.1666666666)       # a decimal approximation of 1/6
+wrong = pb.check_probability(die, lambda o: o == 1, 0.17)                # not 1/6 at any reasonable precision
+rank = la.check_rank([[1, 0.3333333333], [3, 1]], 1)                     # det is 1e-10 for these decimals: rank 2
+
+assert [r.verdict for r in (exact, approx, wrong, rank)] == ["VERIFIED", "CONSISTENT", "REFUTED", "REFUTED"]
 ```
 
 ## What this does not do

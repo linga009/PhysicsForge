@@ -2,6 +2,10 @@
 
 How to verify derivations computationally using sympy and numerical sanity checks.
 
+> **Prefer the executable toolkit.** `scripts/pfv` (see [`verification-tools.md`](./verification-tools.md)) already implements
+> most of the patterns below as tested checks with exact verdicts, and adds number theory, group theory, algebra, inequalities,
+> probability and more. Use the raw sympy patterns here when `pfv` has no check for the question.
+
 ---
 
 ## WHEN TO VERIFY
@@ -23,13 +27,15 @@ on paper and document the check.
 The patterns below are templates for one-off checks. Where a tested tool already
 exists, use it instead of writing fresh sympy from scratch each time:
 
-- **`scripts/deriv_check.py`** — dimensional consistency and limiting-case checks
-  against this project's actual manuscript claims. Invoke via the
-  `/derivation-check` slash command, or run directly:
-  `python scripts/deriv_check.py`.
-- **`scripts/quantum_check.py`** — QuTiP-backed unitarity, CPTP, CHSH, and
-  entanglement-entropy checks, calibrated against canonical QM/QI facts. Invoke
-  via `/quantum-check`, or run directly: `python scripts/test_quantum_check.py`.
+- **`scripts/pfv`** — the toolkit for everything it covers: dimensions
+  (`dimensions.check_dimensions`), limiting cases and identities
+  (`analysis.check_limit`, `check_identity`), derivation chains
+  (`derivation.check_chain`), and quantum checks (unitarity, CPTP channels, PPT
+  entanglement, entanglement entropy, spectra) among 16 domains. Invoke via
+  `/verify`, `/derivation-check` or `/quantum-check`. Its regression suite
+  re-checks this project's own manuscript claims (Allen-Dynes T_c linearity,
+  the printed constant C(1.5, 0.13), the withdrawn 300 K claim, the depolarizing
+  channel, the Tsirelson bound).
 - **`scripts/test_kerr_check.py`** — a worked example of deriving a paper's
   central symbolic result from a real tensor library (EinsteinPy) rather than
   checking it against a textbook formula alone. Read its module docstring
@@ -46,6 +52,11 @@ exists, use it instead of writing fresh sympy from scratch each time:
      end-to-end — check the claimed sign numerically before trusting it, and
      verify the checking method itself can fail (test it against a known-wrong
      derivation too).
+  4. **`nsimplify` snaps decimals.** `sp.nsimplify(0.3333333333)` is `1/3`, even
+     with `rational=True`. Feeding a snapped value into an exact comparison let
+     `pfv` return VERIFIED for false claims (rank, determinant, eigenvalues,
+     probabilities, a z3 inequality) until it was fixed. Convert a float with
+     `sp.Rational(repr(x))` (the decimal as written), never `nsimplify`.
 
 These lessons apply to the ad-hoc patterns below as well — Pattern 3's and
 Pattern 7's `sp.simplify(diff) == 0` checks are exactly the kind of check that

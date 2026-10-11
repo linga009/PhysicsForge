@@ -1,0 +1,7 @@
+# Everything the scripts in this folder need. Tested with Python 3.14 and the versions noted.
+sympy          # 1.14.0  pfv core, all symbolic checks
+numpy          # 2.5.0   pfv numeric checks
+scipy          # 1.18.0  pfv.quantum (expm/logm), pfv.analysis
+z3-solver      # 5.1.0   pfv.smt decision procedures (optional: without it those checks are INCONCLUSIVE)
+citeguard-cli  # 0.1.1   citation_guard.py retraction detection
+einsteinpy     # 0.4.0   test_kerr_check.py only

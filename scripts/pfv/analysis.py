@@ -20,7 +20,7 @@ import mpmath as mp
 import sympy as sp
 from sympy import Symbol, oo, S, Rational
 
-from .core import (Result, verified, consistent, inconclusive, timeout, CheckTimeout, rational_points, unify)
+from .core import (Result, verified, consistent, inconclusive, timeout, CheckTimeout, rational_points, unify, to_exact)
 from .core import refuted as _refuted
 from functools import partial as _partial
 
@@ -411,7 +411,7 @@ def check_inequality(lhs, rhs, domain: dict, strict: bool = False, grid: int = 4
         pass
     if len(syms) == 1 and gap.is_rational_function(syms[0]):
         x = syms[0]
-        lo, hi = map(sp.nsimplify, domain[str(x)] if str(x) in domain else domain[x])
+        lo, hi = (to_exact(b)[0] for b in (domain[str(x)] if str(x) in domain else domain[x]))  # never snap the interval
         try:
             with timeout(seconds):
                 bad = sp.solve_univariate_inequality(gap < 0 if not strict else gap <= 0, x, relational=False, domain=sp.Interval(lo, hi))

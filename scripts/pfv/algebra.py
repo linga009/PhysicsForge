@@ -186,7 +186,24 @@ def check_system_solutions(equations, variables, claimed_solutions) -> Result:
     eqs = unify(*[e.lhs - e.rhs if isinstance(e, sp.Equality) else e for e in raw])
     eqs = eqs if isinstance(eqs, list) else [eqs]
     claim = f"solution set of the system = {claimed_solutions}"
-    pts = [[_S(x) for x in pt] for pt in claimed_solutions]
+    from .core import to_exact
+    inexact = False
+    pts = []
+    for pt in claimed_solutions:
+        row = []
+        for x in pt:
+            v, i = to_exact(x) if not isinstance(x, str) else (_S(x), False)
+            inexact = inexact or i
+            row.append(v)
+        pts.append(row)
+    if inexact:
+        from .core import cap_inexact
+        res = _check_system_solutions_exact(eqs, vs, pts, claim)
+        return cap_inexact(res, "claimed solutions")
+    return _check_system_solutions_exact(eqs, vs, pts, claim)
+
+
+def _check_system_solutions_exact(eqs, vs, pts, claim) -> Result:
     unknown = False
     for pt in pts:
         sub = dict(zip(vs, pt))
@@ -205,7 +222,7 @@ def check_system_solutions(equations, variables, claimed_solutions) -> Result:
         return inconclusive("check_system_solutions", claim, f"{type(e).__name__}: {e}")
     if any(set(vs) & set(sp.sympify(val).free_symbols) for sl in sols for val in sl.values()) or any(len(sl) < len(vs) for sl in sols):
         return inconclusive("check_system_solutions", claim, "the system has a positive-dimensional solution set; a finite list cannot be compared")
-    n_claimed = len({tuple(sp.nsimplify(sp.simplify(x)) for x in pt) for pt in pts})
+    n_claimed = len({tuple(sp.simplify(x) for x in pt) for pt in pts})
     if len(sols) != n_claimed:
         return refuted("check_system_solutions", claim, {"all_solutions": [{str(k): str(v) for k, v in sl.items()} for sl in sols]},
                        detail=f"the claimed set has {n_claimed} distinct points, the system has {len(sols)} (complex solutions counted)")

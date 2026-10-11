@@ -1,43 +1,35 @@
 ---
 name: derivation-check
-description: Verify a specific derivation's dimensional consistency and limiting cases using the real deriv_check.py checks, not self-reported PASS/FAIL
-argumentHint: [the equation or claim to verify]
+description: Check a derivation step by step with pfv — dimensions, limiting cases, each identity used, and the first wrong step in a chain
+argumentHint: [the derivation, equation or chain of steps to verify]
 ---
 
-The user wants a specific derivation or formula verified: `$ARGUMENTS`.
+The user wants a derivation or formula verified: `$ARGUMENTS`.
 
-`scripts/deriv_check.py` is a library, not a CLI — the pattern is to import its
-two functions and write a short script for *this specific claim*, the same way
-`scripts/test_deriv_check.py` does for this project's own manuscript claims.
-Do not just assert "Dimensions: PASS" from inspection; run the check.
+Use `scripts/pfv`. Read `skills/physicsforge/references/verification-tools.md` for the
+check menu and verdict rules. Do not assert "Dimensions: PASS" from inspection: run it.
 
-1. Read `skills/physicsforge/references/verification.md`, especially the
-   "PREFER THE REAL TESTED TOOLS" section, before writing new verification
-   code.
-2. Identify what's actually checkable here:
-   - **Dimensional consistency**: express both sides as `sympy.physics.units`
-     `Dimension` objects and call
-     `check_dimensions(lhs_dim, rhs_dim)` from `scripts/deriv_check.py`.
-   - **Limiting case / known-value reduction**: substitute the limit into the
-     expression and call `check_limit(expr, subs, expected)` — prefer the
-     `symbolic_target=` form (exact symbolic reduction) over a bare numeric
-     `expected` where possible; a single numeric match is weaker evidence than
-     an exact symbolic one.
-3. Write and run a short Python script (in the project directory, not inline
-   prose) that does this for the actual expression at hand:
+1. **Dimensions.** Give each symbol a `pfv.dimensions.Dim` (base names `M L T I Th N J`) and
+   call `dimensions.check_dimensions(lhs, rhs, table)`. It also checks that every internal
+   sum is homogeneous and that arguments of `exp`/`log`/`sin` are dimensionless.
+2. **Each step of the chain.** For a sequence of equal expressions use
+   `derivation.check_chain([...])`; for equation-solving steps use
+   `derivation.check_equation_chain`. Both report the first step that is not valid, and
+   flag lost or extraneous roots (`check_candidates`).
+3. **Identities used along the way:** `analysis.check_identity(lhs, rhs)`. It is exact
+   when sympy can decide, and otherwise CONSISTENT on sample points, never a silent pass.
+4. **Limiting cases:** `analysis.check_limit(expr, var, point, claimed)` for each limit
+   the result must recover. Use at least two independent ones.
+5. Run it as a short script:
    ```python
    import sys; sys.path.insert(0, "${CLAUDE_PLUGIN_ROOT}/scripts")
-   from deriv_check import check_dimensions, check_limit, report
-   # ... build lhs_dim/rhs_dim or expr/subs/expected for THIS claim ...
+   from pfv import dimensions, derivation, analysis
+   from pfv.core import report
+   print(report([...], "the derivation"))
    ```
-4. Report the result with `deriv_check.py`'s own `report()` formatting (PASS/FAIL
-   per check, OVERALL verdict) — don't paraphrase a failure as a pass.
-5. If the check fails, don't hand-wave it: identify whether it's an algebraic
-   error, a sign error, a dimensional error, or a convention mismatch (see
-   `verification.md`'s "INTERPRETING FAILURES"), and say which.
+6. Paste the report verbatim. If a check fails, name the failure type (algebra, sign,
+   dimensions, convention, or a genuinely false claim) and the step where it happens.
 
-If the claim involves a tensor/metric derivation (GR-like), follow the pattern
-in `scripts/test_kerr_check.py` instead — deriving from the actual library
-representation (e.g. EinsteinPy) rather than checking against a textbook
-formula alone, and cross-checking any `sympy.simplify(...) == 0` result
-numerically before trusting it.
+For tensor and metric derivations (GR), use `pfv.geometry` and follow the pattern in
+`scripts/test_kerr_check.py`. Derive from the library's own objects, use the library's own
+symbols (`kerr.symbols()`), and cross-check any `simplify(...) == 0` numerically.

@@ -68,13 +68,10 @@ def check_claimed_value(computed, claimed, claim: str = "claimed value equals re
     Pass `computed` as int / Fraction / sympy Rational / sympy expression, never a float
     when the claim is exact. This is the check that refutes altered final answers.
     """
-    c = sp.nsimplify(computed) if not isinstance(computed, (sp.Basic, int, Fraction)) else sp.sympify(computed)
-    d = sp.sympify(claimed)
-    diff = sp.simplify(c - d)
-    if diff == 0:
-        return verified("check_claimed_value", claim, "exact equality", detail=f"value = {c}")
-    return refuted("check_claimed_value", claim, {"recomputed": c, "claimed": d},
-                   detail=f"difference = {diff}")
+    from .core import to_exact, cap_inexact, claimed_value_result
+    c, computed_inexact = to_exact(computed)
+    res = claimed_value_result("check_claimed_value", claim, c, claimed, "exact equality", truth_inexact=computed_inexact, recomputed=str(c))
+    return cap_inexact(res, "recomputed value") if computed_inexact else res
 
 
 # --------------------------------------------------------------------------

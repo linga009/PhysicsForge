@@ -22,18 +22,72 @@ test-backed tools built to perform them.
 - `.claude-plugin/plugin.json` — plugin manifest (v3.0.0).
 - `.claude-plugin/marketplace.json` — self-hosted marketplace listing, so the
   plugin can be installed with `/plugin marketplace add linga009/PhysicsForge`.
-- `commands/audit.md`, `commands/gap-analysis.md`, `commands/citation-check.md`,
-  `commands/derivation-check.md`, `commands/quantum-check.md`,
-  `commands/preregister.md` — six slash commands, each invoking the real
-  backing tool in `scripts/` rather than describing the protocol in prose
-  alone.
+- `commands/audit.md`, `commands/gap-analysis.md`, `commands/verify.md`,
+  `commands/citation-check.md`, `commands/derivation-check.md`,
+  `commands/quantum-check.md`, `commands/preregister.md` — seven slash
+  commands, each invoking the real backing tool in `scripts/` rather than
+  describing the protocol in prose alone.
 - `scripts/` — `tools/` (from the previously-unmerged `tool/pre-registration`
   branch) renamed and relocated here: `citation_guard.py`, `deriv_check.py`,
-  `quantum_check.py`, `prereg.sh`, `test_kerr_check.py`, their matching
-  `test_*.py` regression suites, `golden_citations.jsonl`, and `STATUS.md`.
+  `prereg.sh`, `test_kerr_check.py`, their matching `test_*.py` regression
+  suites, `golden_citations.jsonl`, and `STATUS.md`; plus `requirements.txt`.
+
+### Added — `scripts/pfv`: executable verification toolkit (merged from `feat/pfv-verification-toolkit`, commit 9a4794c)
+
+16 domains, about 140 checks: number theory, group theory, Lie algebras and
+anomaly cancellation, quantum information, linear and polynomial algebra
+(Groebner ideals), analysis, z3 decision procedures for real inequalities,
+integer constraints and propositional logic, probability and Markov chains,
+combinatorics, GR and gauge theory, mechanics and thermodynamics, vector
+calculus in curvilinear coordinates, QFT gamma-matrix algebra and Ward
+identities, dimensional analysis, derivation chains. Every check returns one of
+four verdicts (REFUTED, VERIFIED, CONSISTENT, INCONCLUSIVE); a finite check can
+refute a universal claim but a pass is only CONSISTENT. `SKILL.md` Phase 6 is
+now "verify by trying to disprove"; `references/verification-tools.md` is the
+menu, kept in step with the code by a test that also runs its examples.
+
+### Fixed — found by red-teaming `pfv` before merging it
+
+- **False VERIFIED from snapped decimals (soundness).** `nsimplify` turned a
+  float such as `0.3333333333` into `1/3` before an exact decision, so false
+  claims came back VERIFIED: rank 1 for `[[1, 0.3333333333], [3, 1]]` (its
+  determinant is 1e-10), determinant 0 for the same matrix, eigenvalue
+  `2.0000000000001` for 2, `P = 0.1666666666` for a die's 1/6, and the z3
+  inequality `0.3333333333*x >= x/3` for x > 0. One rule now applies
+  everywhere (`core.to_exact`, `compare_claimed`, `cap_inexact`): floats are read
+  exactly as written and never snapped; a float claim within 1e-9 of the exact
+  value is CONSISTENT, a larger gap is REFUTED; float input can reach
+  CONSISTENT at most. This is what `verification-tools.md` already promised;
+  the code had not kept that promise.
+- **Windows: reports crashed.** `report()` printed `═ ✓ ✗`, which a cp1252
+  console cannot encode (`UnicodeEncodeError`). Output now falls back to ASCII
+  when stdout cannot encode it.
+- **Windows: timeouts silently off.** `core.timeout` used SIGALRM, which
+  Windows lacks, so a long sympy call could hang forever. A timer thread now
+  interrupts the main thread on platforms without SIGALRM.
+- **Docs tests silently skipped** after the move into the plugin layout (they
+  looked for the doc at the old path and called `skipTest`). They now find
+  `skills/physicsforge/references/verification-tools.md`, and a missing doc fails.
+- **z3 not installed:** the docs-examples test asserted z3 verdicts and failed;
+  it now skips the z3 examples (which are correctly INCONCLUSIVE without z3).
+
+Each fix has a regression test that fails on the original code (the Windows
+timeout test hangs on it). Suite: 109 tests, all passing on Windows with the
+default cp1252 console.
+
+### Added — `quantum.check_entanglement_entropy`; retired `quantum_check.py`
+
+`pfv` gained the one check only `quantum_check.py` had. Every claim the old
+`test_quantum_check.py` and `test_deriv_check.py` covered (Allen-Dynes T_c
+linearity, the printed constant, the biaxial and epitaxial factors, [W] = [R][T],
+the withdrawn 300 K claim, the depolarizing channel, the Tsirelson bound) now
+also runs through `pfv`. `quantum_check.py` was removed, and `qutip` with it.
+`deriv_check.py` stays: the frozen pre-registration in `preregistrations/` names
+it as its instrument, and deleting it would orphan that record.
 - `.github/workflows/tools-ci.yml` — carried over with paths updated from
-  `tools/` to `scripts/`; runs the four deterministic test suites and the
-  pre-registration audit on every push.
+  `tools/` to `scripts/`; runs the deterministic test suites, the
+  pre-registration audit, and the `pfv` suite on Ubuntu, on Windows, and on
+  Ubuntu without z3.
 - `preregistrations/2026-09-28-isotope-shift.md` and
   `results/isotope_shift_result.txt` — the worked pre-registration example.
 
