@@ -9,8 +9,11 @@ The user wants citations verified: `$ARGUMENTS`.
 Read `skills/physicsforge/references/citation-guard.md` for the full protocol,
 verdict types, and PASS/HOLD/FAIL thresholds before reporting results.
 
-1. If given a `.jsonl` file already in the format
-   `{"doi": "..."}` / `{"arxiv_id": "..."}` per line, use it directly.
+1. If given a `.jsonl` file already in the tool's format, use it directly. One object per
+   line, with a `doi` or an `arxiv` key (exactly these names; `arxiv_id` is ignored) and
+   the metadata as the manuscript states it, so drift can be detected:
+   `{"key": "AllenDynes1975", "doi": "10.1103/PhysRevB.12.905", "title": "...", "authors": ["Allen", "Dynes"], "year": 1975}`
+   `{"key": "Semenok2025", "arxiv": "2407.12922", "year": 2024}`
    Otherwise, extract every DOI/arXiv ID from the given manuscript or
    bibliography and build one (ask the user for identifiers that are missing
    rather than guessing them).

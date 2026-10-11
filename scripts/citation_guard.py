@@ -49,6 +49,7 @@ CACHE_TTL_S = 24 * 3600  # retraction status can change; don't cache forever
 # that is a real answer (the DOI/arXiv ID genuinely doesn't exist), and
 # retrying it wastes time and hammers the API for no reason.
 _RETRYABLE_HTTP = {429, 500, 502, 503, 504}
+_MISNAMED_ID_KEYS = {"arxiv_id", "arxivid", "eprint", "arxiv-id", "doi_url", "url_doi"}
 
 
 class _Cache:
@@ -278,8 +279,11 @@ def check_citation(entry: dict[str, Any], *, use_cache: bool = True,
     t0 = time.monotonic()
 
     if not doi and not arxiv:
-        return CitationResult(key, "none", None, "UNVERIFIABLE",
-                               error="no DOI or arXiv ID provided")
+        # A misnamed identifier key must not look like a citation that simply has no identifier.
+        misnamed = sorted(k for k in entry if k.lower() in _MISNAMED_ID_KEYS)
+        error = ("no DOI or arXiv ID provided" if not misnamed else
+                 f"identifier under unrecognised key(s) {misnamed}: use 'doi' or 'arxiv'")
+        return CitationResult(key, "none", None, "UNVERIFIABLE", error=error)
 
     if doi:
         # existence + metadata (not covered by citeguard)

@@ -319,7 +319,7 @@ A manuscript with fabricated citations cannot be delivered as-is. Either:
 For automated verification, use the real backing tool, not a manual API call:
 
 - **`scripts/citation_guard.py`** — the actual verifier behind this protocol. Takes
-  a `.jsonl` file of citations (one `{"doi": ...}` or `{"arxiv_id": ...}` object per
+  a `.jsonl` file of citations (one `{"key": ..., "doi": ...}` or `{"key": ..., "arxiv": ...}` object per
   line), queries Crossref and the arXiv API with retry/backoff and on-disk caching,
   and layers the `citeguard` library's triple-signal retraction detection
   (Crossref `update-to`, Retraction-Watch-backfilled `updated-by`, title-prefix) on

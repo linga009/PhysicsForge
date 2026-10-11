@@ -149,7 +149,19 @@ def test_no_cache_flag_bypasses_cache():
     reset_cache()
 
 
+def test_misnamed_identifier_key_is_named():
+    """An arXiv ID under 'arxiv_id' (the docs once said so) was silently dropped and the citation looked like it had no
+    identifier at all. It is still UNVERIFIABLE -- the tool does not guess -- but the error now names the bad key."""
+    r = cg.check_citation({"key": "x", "arxiv_id": "2407.12922"}, use_cache=False)
+    check("misnamed 'arxiv_id' key is UNVERIFIABLE, not silently treated as identifier-free",
+          r.verdict == "UNVERIFIABLE" and "arxiv_id" in (r.error or ""), f"got {r.verdict}: {r.error}")
+    r = cg.check_citation({"key": "y", "title": "no identifier at all"}, use_cache=False)
+    check("a citation with genuinely no identifier keeps the plain message",
+          r.error == "no DOI or arXiv ID provided", f"got {r.error}")
+
+
 if __name__ == "__main__":
+    test_misnamed_identifier_key_is_named()
     test_retries_transient_then_succeeds()
     test_404_is_not_retried()
     test_exhausts_retries_and_reports_last_error()
